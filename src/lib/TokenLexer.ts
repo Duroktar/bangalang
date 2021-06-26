@@ -12,6 +12,9 @@ export class TokenLexer implements Lexer<Token[]> {
                 case '+':
                     this.parseOperator(TokenType.PLUS, current)
                     break;
+                case '-':
+                    this.parseOperator(TokenType.MINUS, current)
+                    break;
                 case ' ':
                 case '\n':
                 case '\t':

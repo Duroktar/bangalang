@@ -12,6 +12,8 @@ export class AstInterpreter implements Visitor {
         switch (node.op.type) {
             case TokenType.PLUS:
                 return <any>left + <any>right
+            case TokenType.MINUS:
+                return <any>left - <any>right
         }
     }
 

@@ -15,7 +15,7 @@ export class TokenParser implements Parser<Token[], Expression> {
 
     binaryExpr() {
         let left: any = this.literalExpr()
-        while (this.match(TokenType.PLUS)) {
+        while (this.match(TokenType.PLUS, TokenType.MINUS)) {
             const op = <OperatorToken>this.previous()
             const right = this.literalExpr()
             left = new BinaryExpr(left, op, right)
