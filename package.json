@@ -1,0 +1,14 @@
+{
+  "name": "banga-lang",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "cli": "./scripts/bl"
+  },
+  "devDependencies": {
+    "@types/node": "^15.12.4",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.3.4"
+  }
+}
