@@ -1,9 +1,10 @@
 import type { Expression, Parser } from "../Parser";
 import { BinaryExpr, LiteralExpr, ParserError } from "../Parser";
 import { LiteralToken, OperatorToken, Token, TokenType } from "../Lexer";
+import type { Reader } from "../Reader";
 
 export class TokenParser implements Parser<Token[], Expression> {
-    constructor(public input: Token[]) {}
+    constructor(public input: Token[], private reader: Reader) {}
 
     parse() {
         return this.expression()
@@ -44,7 +45,7 @@ export class TokenParser implements Parser<Token[], Expression> {
     }
 
     private isAtEnd() {
-        return this.cursor >= this.input.length
+        return this.peek() === TokenType.EOF
     }
 
     private peek() {
