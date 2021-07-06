@@ -1,37 +1,14 @@
-import { LiteralToken, OperatorToken, Token } from "./Lexer"
-import { Visitable, Visitor } from "./Visitor"
+import type { Token } from "./Lexer";
 
-export class ParserError extends Error {}
-
-export type Ast = Expression
-
-export type Expression =
-    | LiteralExpr
-    | BinaryExpr
-
-export class LiteralExpr implements Visitable {
+export class ParserError {
     constructor(
-        public token: LiteralToken,
-    ) {}
-
-    accept = (visitor: Visitor) => {
-        return visitor.visitLiteralExpr(this)
-    }
-}
-
-export class BinaryExpr implements Visitable {
-    constructor(
-        public left: Expression,
-        public op: OperatorToken,
-        public right: Expression,
-    ) {}
-
-    accept = (visitor: Visitor) => {
-        return visitor.visitBinaryExpr(this)
-    }
+        public message?: string,
+        public token?: Token,
+    ) { }
 }
 
 export interface Parser<I, O> {
+    errors: ParserError[]
     input: I
-    parse(): O
+    parseProgram(): O
 }

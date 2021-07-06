@@ -1,19 +1,20 @@
 import type { Reader } from "../Reader"
-import { Lexer, LexerError, OperatorType, Token, TokenType } from "../Lexer"
+import { KeywordType, Lexer, LexerError, Position, Range, Token, TokenKind as _ } from "../Lexer"
 
 export class TokenLexer implements Lexer<Token[]> {
     constructor(public reader: Reader) { }
 
     lex() {
-        while (!this.reader.atEOF) {
-            const current = this.reader.peek()
+        while (!this.atEOF()) {
+            const current = this.peek()
 
             switch (current) {
-                case '+':
-                case '-':
-                case '=':
-                    this.parseOperator(current)
-                    break;
+                case '(': this.addToken(_.PAREN_OPEN); break;
+                case ')': this.addToken(_.PAREN_CLOSE); break;
+                case ';': this.addToken(_.SEMI); break;
+                case '+': this.addToken(_.PLUS); break;
+                case '-': this.addToken(_.MINUS); break;
+                case '=': this.addToken(_.EQUAL); break;
                 case '"':
                 case "'":
                     this.parseStr(current)
@@ -21,8 +22,9 @@ export class TokenLexer implements Lexer<Token[]> {
                 case '\n':
                     this.reader.incrementLineNo()
                 case ' ':
+                case '\r':
                 case '\t':
-                    this.reader.next()
+                    this.advance()
                     break;
                 default: {
                     if (current.match(/\d/)) {
@@ -36,124 +38,143 @@ export class TokenLexer implements Lexer<Token[]> {
             }
         }
 
-        this.tokens.push({ type: TokenType.EOF })
+        const lineInfo = this.finishLineInfo(this.getPosition())
+
+        this.tokens.push({ kind: _.EOF, lineInfo })
+
         return this.tokens;
     }
 
+    private addToken<T extends Exclude<Token, { value: any }>>(kind: T['kind']) {
+        const start = this.getPosition()
+
+        this.advance()
+
+        this.tokens.push({
+            kind,
+            lineInfo: this.finishLineInfo(start)
+        })
+    }
+
     private parseId() {
-        let res: string = ""
-        let lineInfo = { start: this.lineInfo() }
+        let value: string = ""
+        const start = this.getPosition()
 
         do {
-            res += this.reader.next()
+            value += this.advance()
         }
         while (
-            !this.reader.atEOF
-            && this.reader.peek().match(/[^\s\n]/)
+            !this.atEOF()
+            && this.peek().match(/[A-z_]/)
         )
 
-        this.reader.next()
+        const keywordType = getKeywordType(value)
+        const lineInfo = this.finishLineInfo(start)
 
-        // TODO:
-        // this.tokens.push({
-        //     type: TokenType.IDENTIFIER,
-        //     value: res,
-        //     raw: res,
-        // })
+        if (keywordType) {
+            return this.tokens.push({
+                kind: keywordType,
+                value,
+                lineInfo,
+            })
+        }
+
+        // not a keyword (ie: it's an identifier)
+        return this.tokens.push({
+            kind: _.IDENTIFIER,
+            value,
+            lineInfo,
+        })
     }
 
     private parseInt() {
-        let res: string[] = []
-        let lineInfo = { start: this.lineInfo() }
-    
-        do {
-            res.push(this.reader.next())
-        }
-        while (
-            !this.reader.atEOF
-            && this.reader.peek().match(/[^\s\n]/)
-        )
+        const res: string[] = []
+        const start = this.getPosition()
 
-        const maybeNum = parseInt(res.join(''))
+        while (this.peek().match(/[0-9]/)) {
+            res.push(this.advance())
+            if (this.peek() === '.' && this.peekAhead().match(/[0-9]/)) {
+                res.push(this.advance())
+                while (this.peek().match(/[0-9]/)) {
+                    res.push(this.advance())
+                }
+            }
+        }
+
+        const rawValue = res.join('');
+        const maybeNum = parseFloat(rawValue)
 
         if (Number.isNaN(maybeNum))
-            throw new LexerError(`Not a number: ${res.join()}`)
+            throw new LexerError(`Not a number: ${rawValue}`)
 
         this.tokens.push({
-            type: TokenType.NUMBER,
+            kind: _.NUMBER,
             value: maybeNum,
-            raw: maybeNum.toString(),
-            lineInfo: {
-                ...lineInfo,
-                end: this.lineInfo(),
-            }
+            raw: rawValue,
+            lineInfo: this.finishLineInfo(start),
         })
-
-        this.reader.next()
     }
 
     private parseStr(delim: string) {
         let res: string = ""
-        let lineInfo = { start: this.lineInfo() }
+        let start = this.getPosition()
 
         do {
-            res += this.reader.next()
+            res += this.advance()
         }
         while (
-            !this.reader.atEOF
-            && !this.reader.peek().match(delim)
+            !this.atEOF()
+            && !this.peek().match(delim)
         )
 
-        res += this.reader.next()
+        res += this.advance()
 
         this.tokens.push({
-            type: TokenType.STRING,
+            kind: _.STRING,
             value: res.slice(1, -1),
             raw: res,
-            lineInfo: {
-                ...lineInfo,
-                end: this.lineInfo(),
-            }
-        })
-
-        this.reader.next()
-    }
-
-    private parseOperator(op: string) {
-        let lineInfo = { start: this.lineInfo() }
-    
-        this.reader.next()
-    
-        this.tokens.push({
-            type: getOpType(op),
-            raw: op,
-            lineInfo: {
-                ...lineInfo,
-                end: this.lineInfo(),
-            }
+            lineInfo: this.finishLineInfo(start),
         })
     }
 
-    private lineInfo() {
+    private finishLineInfo(start: Position): Range {
+        return { start, end: this.getPosition() };
+    }
+
+    private getPosition() {
         return {
             line: this.reader.lineNo,
             col: this.reader.columnNo,
         }
     }
 
+    private advance() {
+        return this.reader.next()
+    }
+
+    private peek() {
+        return this.reader.peek()
+    }
+
+    private peekAhead() {
+        return this.reader.peekAhead()
+    }
+
+    private atEOF() {
+        return this.reader.atEOF
+    }
+
     private tokens: Token[] = []
 }
 
-function getOpType(op: string): OperatorType {
-    const res = {
-        '+': TokenType.PLUS,
-        '-': TokenType.MINUS,
-        '=': TokenType.EQUAL,
-    }[op]
+const keywordTypeMap = {
+    'true': _.TRUE,
+    'false': _.FALSE,
+    'let': _.LET,
+} as ObjOf<KeywordType>;
 
-    if (res === undefined)
-        throw new LexerError(`invalid operator type: ${op}`)
-
-    return res as OperatorType
+function getKeywordType(op: string) {
+    return keywordTypeMap[op]
 }
 
+type ObjOf<T> = { [key: string]: T | undefined }

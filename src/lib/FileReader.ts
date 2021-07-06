@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { Range } from "../Lexer";
+import type { Range } from "../Lexer";
 import type { Reader } from "../Reader";
 
 export class FileReader implements Reader {
@@ -8,6 +8,7 @@ export class FileReader implements Reader {
         this.cursor = 0;
         this.lineNo = 1;
         this.columnNo = 1;
+        this.srcLines = this.source.split('\n');
     }
 
     next() {
@@ -23,13 +24,17 @@ export class FileReader implements Reader {
         return this.source[this.cursor + 1];
     }
 
+    previous() {
+        return this.source[this.cursor - 1];
+    }
+
     incrementLineNo() {
-        this.columnNo = 1;
+        this.columnNo = 0;
         return ++this.lineNo;
     }
 
     getLineOfSource(range: Range) {
-        return this.source.split('\n')[range.start.line - 1]
+        return this.srcLines[range.start.line - 1]
     }
 
     get atEOF() {
@@ -41,4 +46,5 @@ export class FileReader implements Reader {
     public source: string;
 
     private cursor: number;
+    private srcLines: string[];
 }

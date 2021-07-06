@@ -1,76 +1,131 @@
-import { bold, red, yellow } from "chalk"
-import { TokenType } from "../Lexer"
-import { Ast, BinaryExpr, Expression, LiteralExpr } from "../Parser"
+import { red, yellowBright } from "chalk"
+import * as Ast from "../Ast"
+import { TokenKind, VariableToken } from "../Lexer"
 import type { Reader } from "../Reader"
-import { TypeChecker, TypeCheckError, TypeName, WithType } from "../Types"
+import { TypeChecker, TypeCheckError, WithType, TypeName } from "../Types"
 import type { Visitable } from "../Visitor"
-import { lineInfo, underline } from "./ErrorReporter"
+import { capitalize, formatTypeError, UNREACHABLE } from "./utils"
 
 export class AstTypeChecker implements TypeChecker {
+    public errors: TypeCheckError[] = []
+    public env: Map<string, TypeName> = new Map()
+
     constructor(private reader: Reader) {}
 
-    public errors: TypeCheckError[] = []
-
-    typecheck(program: Ast): WithType<Ast> {
-        return this.visit(program)
+    typecheck(declarations: Ast.Program) {
+        const rv: WithType<Ast.Statement>[] = []
+        for (let decl of declarations) {
+            rv.push(this.visit(decl))
+        }
+        return rv
     }
 
-    visitLiteralExpr(node: LiteralExpr) {
+    visitLetDeclaration(node: Ast.LetDeclaration) {
+        const init = this.visit(node.init)
+        const initType = this.infer(init)
+        const type = { type: initType }
+        const name = <VariableToken>node.name
+        this.env.set(name.value, type.type)
+        Object.assign(name, type)
+        return Object.assign(node, type)
+    }
+
+    visitExpressionStmt(node: Ast.ExpressionStmt) {
+        const expr = this.visit(node.expr)
+        const type = { type: this.infer(expr) }
+        return Object.assign(node, type)
+    }
+
+    visitVariableExpr(node: Ast.VariableExpr) {
+        const type = this.env.get(node.name)
+        return Object.assign(node, { type })
+    }
+
+    visitAssignExpr(node: Ast.AssignExpr) {
+        const nType = this.env.get((<VariableToken>node.name).value)
+        const expr = this.visit(node.value)
+        const type = { type: nType ?? TypeName.NEVER }
+        const wType = Object.assign(node, type)
+        return this.unify(wType, expr, (t1, t2) => {
+            const k1 = capitalize(Ast.kindName(t2.kind))
+            return (
+                `${k1} of type '${yellowBright(t2.type)}'` +
+                `is not assignable to ${Ast.kindName(t1.kind)}` +
+                `of type '${red(t1.type)}'.`
+            )
+        })
+    }
+
+    visitGroupingExpr(node: Ast.GroupingExpr) {
+        const expr = this.visit(node.expr)
+        const type = { type: this.infer(expr) }
+        return Object.assign(node, type)
+    }
+
+    visitLiteralExpr(node: Ast.LiteralExpr) {
         const type = { type: this.infer(node) }
         return Object.assign(node, type)
     }
 
-    visitBinaryExpr(node: BinaryExpr) {
+    visitBinaryExpr(node: Ast.BinaryExpr) {
         const left = this.visit(node.left)
         const right = this.visit(node.right)
         const type = { type: this.unify(left, right) }
         return Object.assign(node, type)
     }
 
-    infer(literal: LiteralExpr): TypeName {
-        switch (literal.token.type) {
-            case TokenType.NUMBER:
-                return TypeName.NUMBER
-            case TokenType.STRING:
-                return TypeName.STRING
-            default:
-                throw new TypeCheckError(
-                    `!LITERAL: ${literal.token}`
-                )
+    infer(expr: Ast.Expression | Ast.Statement): TypeName {
+        if (expr instanceof Ast.LiteralExpr) {
+            switch (expr.token.kind) {
+                case TokenKind.NUMBER:
+                    return TypeName.NUMBER
+                case TokenKind.STRING:
+                    return TypeName.STRING
+                case TokenKind.FALSE:
+                case TokenKind.TRUE:
+                    return TypeName.BOOLEAN
+                case TokenKind.IDENTIFIER:
+                    return TypeName.ANY
+                default: {
+                    UNREACHABLE(expr.token)
+                    throw new Error('unreachable')
+                }
+            }
         }
+
+        if (
+            expr instanceof Ast.BinaryExpr     ||
+            expr instanceof Ast.AssignExpr     ||
+            expr instanceof Ast.VariableExpr   ||
+            expr instanceof Ast.GroupingExpr   ||
+            expr instanceof Ast.LetDeclaration ||
+            expr instanceof Ast.ExpressionStmt
+        ) {
+            return (<WithType<typeof expr>>expr).type
+        }
+
+        return UNREACHABLE(expr) && TypeName.NEVER
     }
 
-    unify(expr1: WithType<Expression>, expr2: WithType<Expression>): TypeName {
+    unify<T1 extends WithType<Ast.Expression>, T2 extends WithType<Ast.Expression>>(
+        expr1: T1, expr2: T2,
+        getErrMsg?: (t1: T1, t2: T2) => string
+    ): TypeName {
+        if ([expr1.type, expr2.type].includes(TypeName.ANY)) {
+            return [expr1.type, expr2.type]
+                .filter(o => o !== TypeName.ANY)[0]
+        }
         if (expr1.type !== expr2.type) {
-            const typeError = this.formatTypeError(expr1, expr2)
+            const errMsg = getErrMsg?.(expr1, expr2)
+            const typeError = formatTypeError(this.reader, expr1, expr2, errMsg)
+            debugger
             this.errors.push(new TypeCheckError(typeError))
             return TypeName.NEVER
         }
-
         return expr1.type;
     }
 
     visit<T extends Visitable>(node: T): WithType<T> {
         return node.accept(this)
-    }
-
-    private formatTypeError = (
-        expr1: WithType<Expression>,
-        expr2: WithType<Expression>,
-    ): string | string[] => {
-        const lineInfoExpr1 = lineInfo(expr1), lineInfoExpr2 = lineInfo(expr2);
-        const columnRange = `${lineInfoExpr1.start.col}-${lineInfoExpr2.end.col}`
-        return [
-            `${this.reader.srcpath} (${lineInfoExpr1.start.line}:${columnRange})`,
-            ' ',
-            this.reader.getLineOfSource(lineInfoExpr1),
-            (
-                red(underline(lineInfoExpr1))
-                +
-                yellow(underline(lineInfoExpr2, -(lineInfoExpr1.end.col - 1)))
-            ),
-            ' ',
-            '- ' + bold(`A ${red(expr1.type)} type can't be used with a ${yellow(expr2.type)} type`),
-        ]
     }
 }

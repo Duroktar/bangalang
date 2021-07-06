@@ -1,0 +1,30 @@
+# Grammar
+
+----
+
+## Lexer: string -> token[]
+
+token:
+    | STRING
+    | NUMBER
+    | PLUS = '+'
+
+
+## Parser: token[] -> program
+
+program        → declaration* EOF ;
+
+declaration    → letDecl | statement ;
+letDecl        → "let" IDENTIFIER ( "=" expression )? ";" ;
+
+statement      → exprStmt | block ;
+exprStmt       → expression ";" ;
+block          → "{" declaration* "}" ;
+
+expression     → assignment ;
+assignment     → IDENTIFIER "=" assignment | term ;
+term           → primary ( ( "-" | "+" ) primary )* ;
+primary        →
+                | "true" | "false"
+                | NUMBER | STRING | IDENTIFIER
+                | "(" expression ")" ;

@@ -1,24 +1,25 @@
-import type { Ast } from "./Parser";
-import type { Visitor } from "./Visitor";
+import type { Program } from "./Ast";
+import type { Token } from "./Lexer";
 
 export class TypeCheckError {
-    constructor(_msg: string | string[]) {
-        this.message = !Array.isArray(_msg)
-            ? _msg
-            : _msg.join('\n')
-    }
-    public message: string;
+    constructor(
+        public message: string,
+        public token?: Token,
+    ) {}
 }
 
-export type WithType<T> = T & { type: TypeName }
 
 export enum TypeName {
     STRING = 'string',
     NUMBER = 'number',
+    BOOLEAN = 'boolean',
     NEVER = 'never',
+    ANY = 'any',
 }
 
-export interface TypeChecker extends Visitor {
-    typecheck(ast: Ast): Ast
+export type WithType<T> = T & { type: TypeName }
+
+export interface TypeChecker {
+    typecheck(ast: Program): any
     errors: TypeCheckError[]
 }

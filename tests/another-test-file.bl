@@ -1,0 +1,9 @@
+let hat = 5;
+let bat = hat + hat;
+let cat = 1;
+let ron = 'dude';
+cat = bat + cat;
+cat = cat + bat;
+ron = cat;
+ron = cat + cat;
+cat;

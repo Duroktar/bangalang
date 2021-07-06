@@ -1,51 +1,74 @@
 import type { Reader } from "./Reader";
 
-export class LexerError extends Error {}
-
-export enum TokenType {
-    STRING = 1,
-    NUMBER,
-    IDENTIFIER,
-
-    PAREN_OPEN,
-    PAREN_CLOSE,
-    SEMI,
-    PLUS,
-    MINUS,
-    STAR,
-    SLASH,
-    EQUAL,
-
-    EOF
+export class LexerError {
+    constructor(
+        public message: string,
+        public token?: Token,
+    ) { }
 }
 
-export const OperatorTypes = [
-    TokenType.PLUS,
-    TokenType.MINUS,
-    TokenType.STAR,
-    TokenType.SLASH,
-    TokenType.EQUAL,
+
+export enum TokenKind {
+    // literals
+    STRING ='string',
+    NUMBER ='number',
+    IDENTIFIER ='identifier',
+
+    // single character tokens
+    PAREN_OPEN ='paren_open',
+    PAREN_CLOSE ='paren_close',
+    SEMI ='semi',
+    PLUS ='plus',
+    MINUS ='minus',
+    STAR ='star',
+    SLASH = 'slash',
+    EQUAL = 'equal',
+
+    // keywords
+    TRUE = 'true',
+    FALSE = 'false',
+    LET = 'let',
+
+    // --
+    EOF = '<EOF>'
+}
+
+export const KeywordTypes = [
+    TokenKind.TRUE,
+    TokenKind.FALSE,
+    TokenKind.LET,
 ] as const
 
-export type OperatorType = typeof OperatorTypes[number]
+export type KeywordType = typeof KeywordTypes[number]
+
+export type NumberToken = TokenOf<TokenKind.NUMBER>
+export type StringToken = TokenOf<TokenKind.STRING>
+export type IdentifierToken = TokenOf<TokenKind.IDENTIFIER>
+export type TrueToken = TokenOf<TokenKind.TRUE>
+export type FalseToken = TokenOf<TokenKind.FALSE>
 
 export type LiteralToken =
-    | TokenOf<TokenType.NUMBER>
-    | TokenOf<TokenType.STRING>
-    | TokenOf<TokenType.IDENTIFIER>
+    | NumberToken
+    | StringToken
+    | IdentifierToken
+    | TrueToken
+    | FalseToken
 
 export type OperatorToken =
-    | TokenOf<TokenType.PLUS>
-    | TokenOf<TokenType.MINUS>
-    | TokenOf<TokenType.STAR>
-    | TokenOf<TokenType.SLASH>
-    | TokenOf<TokenType.EQUAL>
+    | TokenOf<TokenKind.PLUS>
+    | TokenOf<TokenKind.MINUS>
+    | TokenOf<TokenKind.STAR>
+    | TokenOf<TokenKind.SLASH>
+    | TokenOf<TokenKind.EQUAL>
+
+export type VariableToken =
+    IdentifierToken
 
 export type Position = {
     line: number;
     col: number;
 }
-    
+
 export type Range = {
     start: Position;
     end: Position;
@@ -55,21 +78,27 @@ export type LineInfo = {
     lineInfo: Range;
 };
 
-export type Token =
-    | { type: TokenType.NUMBER; raw: string; value: number; } & LineInfo
-    | { type: TokenType.STRING; raw: string; value: string; } & LineInfo
-    | { type: TokenType.SEMI;   raw: string; } & LineInfo
-    | { type: TokenType.PLUS;   raw: string; } & LineInfo
-    | { type: TokenType.MINUS;  raw: string; } & LineInfo
-    | { type: TokenType.STAR;   raw: string; } & LineInfo
-    | { type: TokenType.SLASH;  raw: string; } & LineInfo
-    | { type: TokenType.EQUAL;  raw: string; } & LineInfo
-    | { type: TokenType.IDENTIFIER;  raw: string; value: string; } & LineInfo
-    | { type: TokenType.PAREN_OPEN;  raw: string; } & LineInfo
-    | { type: TokenType.PAREN_CLOSE; raw: string; } & LineInfo
-    | { type: TokenType.EOF; }
+export type Token = (
+    | Kinded<TokenKind.NUMBER,     { value: number; raw: string }>
+    | Kinded<TokenKind.STRING,     { value: string; raw: string }>
+    | Kinded<TokenKind.IDENTIFIER, { value: string; }>
+    | Kinded<TokenKind.TRUE,       { value: string; }>
+    | Kinded<TokenKind.FALSE,      { value: string; }>
+    | Kinded<TokenKind.PAREN_OPEN>
+    | Kinded<TokenKind.PAREN_CLOSE>
+    | Kinded<TokenKind.SEMI>
+    | Kinded<TokenKind.PLUS>
+    | Kinded<TokenKind.MINUS>
+    | Kinded<TokenKind.STAR>
+    | Kinded<TokenKind.SLASH>
+    | Kinded<TokenKind.EQUAL>
+    | Kinded<TokenKind.LET>
+    | Kinded<TokenKind.EOF>
+) & LineInfo
 
-export type TokenOf<T> = Extract<Token, { type: T }>
+export type Kinded<T, R = {}> = { kind:T } & R
+
+export type TokenOf<T extends TokenKind> = Extract<Token, { kind: T }>
 
 export interface Lexer<T> {
     lex(): T

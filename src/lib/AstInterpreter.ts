@@ -1,26 +1,63 @@
-import { TokenType } from "../Lexer";
-import type { LiteralExpr, BinaryExpr, Expression } from "../Parser";
+import type * as Ast from "../Ast";
+import { TokenKind, VariableToken } from "../Lexer";
 import type { Reader } from "../Reader";
-import type { Visitor } from "../Visitor";
+import type { Visitable, Visitor } from "../Visitor";
 
 export class AstInterpreter implements Visitor {
+    public env: Map<string, any> = new Map()
+
     constructor(private reader: Reader) {}
 
-    visitLiteralExpr(node: LiteralExpr) {
+    public execute(instructions: Ast.Program): any {
+        const rv: any[] = []
+        for (const line of instructions) {
+            rv.push(this.evaluate(line))
+        }
+        return rv
+    }
+
+    visitExpressionStmt(node: Ast.ExpressionStmt) {
+        return this.evaluate(node.expr)
+    }
+
+    visitLetDeclaration(node: Ast.LetDeclaration) {
+        const token = <VariableToken>node.name
+        const value = node.init
+            ? this.evaluate(node.init)
+            : undefined
+        this.env.set(token.value, value)
+    }
+
+    visitVariableExpr(node: Ast.VariableExpr) {
+        return this.env.get(node.name)
+    }
+
+    visitAssignExpr(node: Ast.AssignExpr) {
+        const token = <VariableToken>node.name
+        const value = this.evaluate(node.value)
+        this.env.set(token.value, value)
+    }
+
+    visitGroupingExpr(node: Ast.GroupingExpr) {
+        return this.evaluate(node.expr)
+    }
+
+    visitLiteralExpr(node: Ast.LiteralExpr) {
         return node.token.value
     }
-    visitBinaryExpr(node: BinaryExpr) {
-        const left = this.interpret(node.left)
-        const right = this.interpret(node.right)
-        switch (node.op.type) {
-            case TokenType.PLUS:
+
+    visitBinaryExpr(node: Ast.BinaryExpr) {
+        const left = this.evaluate(node.left)
+        const right = this.evaluate(node.right)
+        switch (node.op.kind) {
+            case TokenKind.PLUS:
                 return <any>left + <any>right
-            case TokenType.MINUS:
+            case TokenKind.MINUS:
                 return <any>left - <any>right
         }
     }
 
-    interpret(node: Expression): object {
+    private evaluate<T extends Visitable>(node: T): T {
         return node.accept(this)
     }
 }

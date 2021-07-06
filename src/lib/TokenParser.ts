@@ -1,41 +1,129 @@
-import type { Expression, Parser } from "../Parser";
-import { BinaryExpr, LiteralExpr, ParserError } from "../Parser";
-import { LiteralToken, OperatorToken, Token, TokenType } from "../Lexer";
+import * as Ast from "../Ast";
+import { LiteralToken, OperatorToken, Token, TokenOf, TokenKind, VariableToken, NumberToken, StringToken } from "../Lexer";
+import { Parser, ParserError } from "../Parser";
 import type { Reader } from "../Reader";
+import { getToken, underline } from "./ConsoleReporter";
 
-export class TokenParser implements Parser<Token[], Expression> {
+export class TokenParser implements Parser<Token[], object[]> {
+    public errors: ParserError[] = []
+
     constructor(public input: Token[], private reader: Reader) {}
 
-    parse() {
-        return this.expression()
+    hadErrors() {
+        return this.errors.length != 0
+    }
+
+    parseProgram(): Ast.Program {
+        const stmts: Ast.Program = []
+        while (!this.isAtEnd())
+            stmts.push(this.declaration())
+        return stmts
+    }
+
+    declaration() {
+        try {
+            if (this.match(TokenKind.LET)) {
+                return this.letDecl()
+            }
+
+            return this.statement()
+        } catch (error) {
+            this.errors.push(error.message)
+            this.synchronize()
+            return null as never
+        }
+    }
+
+    letDecl() {
+        const name = this.consume(TokenKind.IDENTIFIER, 'Expected variable name')
+
+        this.consume(TokenKind.EQUAL, "No un-initialized variables.")
+
+        const init = this.expression()
+
+        this.consume(TokenKind.SEMI, "Expected ';' after declaration.")
+
+        return new Ast.LetDeclaration(name, init)
+    }
+
+    statement() {
+        return this.exprStmt()
+    }
+
+    exprStmt() {
+        const expr = this.expression()
+        this.consume(TokenKind.SEMI, "Expected ';' after expression.")
+        return new Ast.ExpressionStmt(expr, getToken(expr))
     }
 
     expression() {
-        return this.binaryExpr()
+        return this.assignment()
     }
 
-    binaryExpr() {
-        let left: any = this.literalExpr()
-        while (this.match(TokenType.PLUS, TokenType.MINUS)) {
+    assignment(): Ast.Expression {
+        const expr = this.term()
+        if (this.match(TokenKind.EQUAL)) {
+            const equals = this.previous()
+            const value = this.assignment()
+            if (!(expr instanceof Ast.VariableExpr)) {
+                const rng = equals.lineInfo
+                const src = this.reader.getLineOfSource(rng)
+                const arrows = underline(rng)
+                const msg = '- Invalid assignment target'
+                const err = `\n${src}\n${arrows}\n${msg}`
+                throw new ParserError(err)
+            }
+            return new Ast.AssignExpr(expr.token, value)
+        }
+        return expr
+    }
+
+    term() {
+        let left: any = this.primary()
+        while (this.match(TokenKind.PLUS, TokenKind.MINUS)) {
             const op = <OperatorToken>this.previous()
-            const right = this.literalExpr()
-            left = new BinaryExpr(left, op, right)
+            const right = this.primary()
+            left = new Ast.BinaryExpr(left, op, right)
         }
         return left
     }
 
-    literalExpr() {
-        if (this.match(TokenType.NUMBER, TokenType.STRING))
-            return new LiteralExpr(<LiteralToken>this.previous())
+    primary() {
+        if (this.match(TokenKind.TRUE))
+            new Ast.LiteralExpr(true, 'true', <LiteralToken>this.previous())
+        if (this.match(TokenKind.FALSE))
+            new Ast.LiteralExpr(false, 'false', <LiteralToken>this.previous())
 
-        throw new ParserError(`Woops: ${this.peek()}`)
+        if (this.match(TokenKind.NUMBER, TokenKind.STRING)) {
+            const expr = <NumberToken | StringToken>this.previous()
+            return new Ast.LiteralExpr(expr.value, expr.raw, expr)
+        }
+
+        if (this.match(TokenKind.IDENTIFIER)) {
+            const token = <VariableToken>this.previous()
+            return new Ast.VariableExpr(token.value, token)
+        }
+
+        if (this.match(TokenKind.PAREN_OPEN)) {
+            const token = this.previous()
+            const expr = this.expression()
+            this.consume(TokenKind.PAREN_CLOSE, "Expect ')' after expression.")
+            return new Ast.GroupingExpr(expr, token)
+        }
+
+        throw new ParserError(`Can't parse primary`, this.peek())
     }
 
+    consume<T extends TokenKind>(tokenType: T, msg: string) {
+        if (this.check(tokenType))
+            return this.advance() as TokenOf<T>
+        throw new ParserError(msg, this.peek())
+    }
 
-    private check(type: TokenType) {
+    private check(type: TokenKind) {
         if (this.isAtEnd())
             return false
-        return this.peek().type === type
+        return this.peek().kind === type
     }
 
     private advance() {
@@ -45,7 +133,7 @@ export class TokenParser implements Parser<Token[], Expression> {
     }
 
     private isAtEnd() {
-        return this.peek() === TokenType.EOF
+        return this.peek().kind === TokenKind.EOF
     }
 
     private peek() {
@@ -56,7 +144,7 @@ export class TokenParser implements Parser<Token[], Expression> {
         return this.input[this.cursor - 1]
     }
 
-    private match(...types: TokenType[]) {
+    private match(...types: TokenKind[]) {
         for (let type of types) {
             if (this.check(type)) {
                 this.advance()
@@ -64,6 +152,21 @@ export class TokenParser implements Parser<Token[], Expression> {
             }
         }
         return false
+    }
+
+    private synchronize() {
+        this.advance()
+        while (!this.isAtEnd()) {
+            if (this.previous().kind === TokenKind.SEMI)
+                return
+
+            switch (this.peek().kind) {
+                // case TokenType...:
+                //     return
+            }
+
+            this.advance()
+        }
     }
 
     private cursor: number = 0
