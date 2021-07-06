@@ -1,4 +1,4 @@
-import type { Program } from "./Ast";
+import type { Program, Expression } from "./Ast";
 import type { Token } from "./Lexer";
 
 export class TypeCheckError {
@@ -18,6 +18,8 @@ export enum TypeName {
 }
 
 export type WithType<T> = T & { type: TypeName }
+
+export type TypedExpr = WithType<Expression>;
 
 export interface TypeChecker {
     typecheck(ast: Program): any

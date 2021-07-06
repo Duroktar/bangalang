@@ -1,3 +1,5 @@
+import * as Ast from "./Ast";
+import { UNREACHABLE } from "./lib/utils";
 import type { Reader } from "./Reader";
 
 export class LexerError {
@@ -103,4 +105,46 @@ export type TokenOf<T extends TokenKind> = Extract<Token, { kind: T }>
 export interface Lexer<T> {
     lex(): T
     reader: Reader
+}
+
+const newWithLineInfo = <T extends Token>(expr: T, r: Range) =>
+    Object.assign(expr, { lineInfo: r })
+
+export function getToken(expr: Ast.Statement | Ast.Expression): Token {
+    if (expr instanceof Ast.LiteralExpr) {
+        return expr.token
+    }
+
+    if (expr instanceof Ast.BinaryExpr) {
+        return newWithLineInfo(expr.op, {
+            start: getToken(expr.left).lineInfo.start,
+            end: getToken(expr.right).lineInfo.end,
+        })
+    }
+
+    if (expr instanceof Ast.VariableExpr) {
+        return expr.token
+    }
+
+    if (expr instanceof Ast.AssignExpr) {
+        return expr.name
+    }
+
+    if (expr instanceof Ast.GroupingExpr) {
+        return expr.token
+    }
+
+    if (expr instanceof Ast.LetDeclaration) {
+        return expr.name
+    }
+
+    if (expr instanceof Ast.ExpressionStmt) {
+        return expr.token
+    }
+
+    throw new Error('No token found for: ' + UNREACHABLE(expr))
+}
+
+export function lineInfo(expr: Ast.Statement | Ast.Expression): Range {
+    return getToken(expr).lineInfo
 }

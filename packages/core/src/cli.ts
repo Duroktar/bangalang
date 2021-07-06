@@ -1,12 +1,12 @@
+import { resolve as resolvePath } from "path"
 import { AstInterpreter } from "./lib/AstInterpreter"
 import { FileReader } from "./lib/FileReader"
-import { StdOutPrinter } from "./lib/StdOutPrinter"
+import { ConsoleLogger } from "./lib/ConsoleLogger"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
-// import { AstTypeChecker } from "./lib/TypeChecker"
 import { HindleyMilner } from "./lib/HindleyMilner"
-import { resolve as resolvePath } from "path"
-import { ConsoleReporter } from "./lib/ConsoleReporter"
+import { ConsoleReporter } from "./lib/SysReporter"
+// import { AstTypeChecker } from "./lib/TypeChecker"
 
 function main(args: string[]) {
     const debugMode = args.slice(1, -1)
@@ -15,7 +15,7 @@ function main(args: string[]) {
     const filename = resolvePath(args[args.length - 1])
 
     const reader = new FileReader(filename)
-    const output = new StdOutPrinter()
+    const output = new ConsoleLogger()
 
     const reporter = new ConsoleReporter(reader, output)
 

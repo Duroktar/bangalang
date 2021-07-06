@@ -1,8 +1,8 @@
 import * as Ast from "../Ast";
-import { LiteralToken, OperatorToken, Token, TokenOf, TokenKind, VariableToken, NumberToken, StringToken } from "../Lexer";
+import { LiteralToken, OperatorToken, Token, TokenOf, TokenKind, VariableToken, NumberToken, StringToken, getToken } from "../Lexer";
 import { Parser, ParserError } from "../Parser";
+import { underline } from "./utils";
 import type { Reader } from "../Reader";
-import { getToken, underline } from "./ConsoleReporter";
 
 export class TokenParser implements Parser<Token[], object[]> {
     public errors: ParserError[] = []

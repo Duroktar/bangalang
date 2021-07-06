@@ -1,8 +1,8 @@
 import type * as Ast from '../Ast';
+import { lineInfo } from '../Lexer';
 import { Reader } from '../Reader';
-import { TypeChecker, TypeCheckError } from '../Types';
-import { lineInfo } from "./ConsoleReporter";
-import { format, formatTypeError, UNREACHABLE, zip } from "./utils";
+import { TypeChecker, TypeCheckError, TypeName } from '../Types';
+import { format, UNREACHABLE, zip } from "./utils";
 
 type Env = Record<string, TyVar>
 
@@ -21,22 +21,15 @@ class TypeVariable {
 class TypeOperator {
     constructor(
         public readonly name: string,
-        public readonly types: TyVar[],
+        public readonly types: TyVar[] = [],
     ) {}
 }
 
-let _next_variable_id = 0
-let _next_unique_name = 'a'
-
-export const mkVariableName = (): string =>
-    String.fromCharCode(_next_unique_name.charCodeAt(0) + 1)
-
-export const mkVariable = (): TypeVariable =>
-    new TypeVariable(_next_variable_id++)
-
-export const intType = new TypeOperator("int", [])
-export const strType = new TypeOperator("str", [])
-export const boolType = new TypeOperator("bool", [])
+export const intType = new TypeOperator(TypeName.NUMBER)
+export const strType = new TypeOperator(TypeName.STRING)
+export const boolType = new TypeOperator(TypeName.BOOLEAN)
+export const anyType = new TypeOperator(TypeName.ANY)
+export const neverType = new TypeOperator(TypeName.NEVER)
 
 export class HindleyMilner implements TypeChecker {
     constructor(public reader: Reader) {}
@@ -56,8 +49,11 @@ export class HindleyMilner implements TypeChecker {
             let t = this.analyze(term, env)
             return this.typeToString(t)
         } catch (err) {
-            this.errors.push(err)
-            return 'never'
+            if (err instanceof TypeCheckError) {
+                this.errors.push(err)
+                return TypeName.NEVER
+            }
+            throw err
         }
     }
 
@@ -68,29 +64,27 @@ export class HindleyMilner implements TypeChecker {
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'ExpressionStmt') {
-                const type = analyzeRec(term.expr, env, nonGeneric)
-                return Object.assign(term, { type }).type
+                return analyzeRec(term.expr, env, nonGeneric)
             }
             if (term.kind === 'GroupingExpr') {
-                const type = analyzeRec(term.expr, env, nonGeneric)
-                return Object.assign(term, { type }).type
+                return analyzeRec(term.expr, env, nonGeneric)
             }
             if (term.kind === 'BinaryExpr') {
                 let left = analyzeRec(term.left, env, nonGeneric)
                 let right = analyzeRec(term.right, env, nonGeneric)
                 this.unify(left, right, term)
-                return Object.assign(term, { type: left }).type
+                return left
             }
             if (term.kind === 'AssignExpr') {
                 let name = this.getType(term.name.value, env, nonGeneric)
                 let body = analyzeRec(term.value, env, nonGeneric)
                 this.unify(name, body, term)
-                return Object.assign(term, { type: name }).type
+                return name
             }
             if (term.kind === 'LetDeclaration') {
                 let type = analyzeRec(term.init, env, nonGeneric)
                 env[term.name.value] = type
-                return Object.assign(term, { type }).type
+                return type
             }
             if (term.kind === 'LiteralExpr') {
                 const type = this.getLiteralType(term, env, nonGeneric)
@@ -144,7 +138,7 @@ export class HindleyMilner implements TypeChecker {
             case 'number':   return intType;
             case 'boolean':  return boolType;
             default: {
-                throw new TypeCheckError('Unknown literal type: ' + term.raw)
+                throw new Error('Unknown literal type: ' + term.raw)
             }
         }
     }
@@ -163,7 +157,7 @@ export class HindleyMilner implements TypeChecker {
             if (p instanceof TypeVariable) {
                 if (this.isGeneric(p, nonGeneric)) {
                     if (!table.has(p)) {
-                        let newVar = mkVariable()
+                        let newVar = this.mkVariable()
                         table.set(p, newVar)
                         return newVar
                     }
@@ -177,7 +171,7 @@ export class HindleyMilner implements TypeChecker {
                     p.types.map(t => freshRec(t))
                 )
             }
-            throw new TypeCheckError(`Unreachable 'fresh'`)
+            throw new Error(`Unreachable 'fresh'`)
         }
         return freshRec(type)
     }
@@ -222,19 +216,19 @@ export class HindleyMilner implements TypeChecker {
 
     variableName(t: TypeVariable): string {
         if (t.name) return t.name
-        t.name = _next_unique_name;
-        _next_unique_name = mkVariableName()
+        t.name = this._next_unique_name;
+        this._next_unique_name = this.mkVariableName()
         return t.name
     }
 
-    termToString(term: any): string {
+    termToString(term: Ast.Statement | Ast.Expression): string {
         switch (term.kind) {
             case 'ExpressionStmt':
                 return this.termToString(term.expr)
             case 'VariableExpr':
                 return term.name
             case 'LiteralExpr':
-                return term.value
+                return <string>term.value
             case 'LetDeclaration':
                 return term.name.value
             default: {
@@ -243,4 +237,14 @@ export class HindleyMilner implements TypeChecker {
             }
         }
     }
+
+
+    private _next_variable_id = 0
+    private _next_unique_name = 'a'
+
+    private mkVariableName = (): string =>
+        String.fromCharCode(this._next_unique_name.charCodeAt(0) + 1)
+
+    private mkVariable = (): TypeVariable =>
+        new TypeVariable(this._next_variable_id++)
 }

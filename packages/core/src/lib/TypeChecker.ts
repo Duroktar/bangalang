@@ -1,16 +1,16 @@
-import { red, yellowBright } from "chalk"
 import * as Ast from "../Ast"
 import { TokenKind, VariableToken } from "../Lexer"
 import type { Reader } from "../Reader"
+import { Reporter } from "../Reporter"
 import { TypeChecker, TypeCheckError, WithType, TypeName } from "../Types"
 import type { Visitable } from "../Visitor"
-import { capitalize, formatTypeError, UNREACHABLE } from "./utils"
+import { capitalize, UNREACHABLE } from "./utils"
 
 export class AstTypeChecker implements TypeChecker {
     public errors: TypeCheckError[] = []
     public env: Map<string, TypeName> = new Map()
 
-    constructor(private reader: Reader) {}
+    constructor(public reader: Reader, public reporter: Reporter) {}
 
     typecheck(declarations: Ast.Program) {
         const rv: WithType<Ast.Statement>[] = []
@@ -49,9 +49,9 @@ export class AstTypeChecker implements TypeChecker {
         return this.unify(wType, expr, (t1, t2) => {
             const k1 = capitalize(Ast.kindName(t2.kind))
             return (
-                `${k1} of type '${yellowBright(t2.type)}'` +
+                `${k1} of type '${t2.type}'` +
                 `is not assignable to ${Ast.kindName(t1.kind)}` +
-                `of type '${red(t1.type)}'.`
+                `of type '${t1.type}'.`
             )
         })
     }
@@ -117,8 +117,7 @@ export class AstTypeChecker implements TypeChecker {
         }
         if (expr1.type !== expr2.type) {
             const errMsg = getErrMsg?.(expr1, expr2)
-            const typeError = formatTypeError(this.reader, expr1, expr2, errMsg)
-            debugger
+            const typeError = this.reporter.formatTypeError(this.reader, expr1, expr2, errMsg)
             this.errors.push(new TypeCheckError(typeError))
             return TypeName.NEVER
         }
