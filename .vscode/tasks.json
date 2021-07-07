@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "type": "typescript",
+            "tsconfig": "packages/core/tsconfig.json",
+            "option": "watch",
+            "problemMatcher": [
+                "$tsc-watch"
+            ],
+            "group": "build",
+            "label": "tsc: watch - core"
+        },
+        {
+            "type": "typescript",
+            "tsconfig": "packages/language-server/tsconfig.json",
+            "option": "watch",
+            "problemMatcher": [
+                "$tsc-watch"
+            ],
+            "group": "build",
+            "label": "tsc: watch - language-server"
+        }
+    ]
+}

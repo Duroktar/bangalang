@@ -28,14 +28,14 @@ export class TokenParser implements Parser<Token[], object[]> {
 
             return this.statement()
         } catch (error) {
-            this.errors.push(error.message)
+            this.errors.push(error)
             this.synchronize()
             return null as never
         }
     }
 
     letDecl() {
-        const name = this.consume(TokenKind.IDENTIFIER, 'Expected variable name')
+        const name = this.consume(TokenKind.IDENTIFIER, 'Expected variable name.')
 
         this.consume(TokenKind.EQUAL, "No un-initialized variables.")
 
@@ -71,7 +71,7 @@ export class TokenParser implements Parser<Token[], object[]> {
                 const arrows = underline(rng)
                 const msg = '- Invalid assignment target'
                 const err = `\n${src}\n${arrows}\n${msg}`
-                throw new ParserError(err)
+                throw new ParserError(err, equals)
             }
             return new Ast.AssignExpr(expr.token, value)
         }
@@ -116,17 +116,17 @@ export class TokenParser implements Parser<Token[], object[]> {
 
     consume<T extends TokenKind>(tokenType: T, msg: string) {
         if (this.check(tokenType))
-            return this.advance() as TokenOf<T>
-        throw new ParserError(msg, this.peek())
+            return this.advance<T>()
+        throw new ParserError(msg, this.previous() ?? this.peek())
     }
 
-    private check(type: TokenKind) {
+    private check(type: TokenKind): boolean {
         if (this.isAtEnd())
             return false
         return this.peek().kind === type
     }
 
-    private advance() {
+    private advance<T extends TokenKind>(): TokenOf<T> {
         if (!this.isAtEnd())
             this.cursor++
         return this.previous()
@@ -136,12 +136,12 @@ export class TokenParser implements Parser<Token[], object[]> {
         return this.peek().kind === TokenKind.EOF
     }
 
-    private peek() {
-        return this.input[this.cursor]
+    private peek<T extends TokenKind>(): TokenOf<T> {
+        return this.input[this.cursor] as TokenOf<T>
     }
 
-    private previous() {
-        return this.input[this.cursor - 1]
+    private previous<T extends TokenKind>(): TokenOf<T> {
+        return this.input[this.cursor - 1] as TokenOf<T>
     }
 
     private match(...types: TokenKind[]) {

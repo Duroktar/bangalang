@@ -1,5 +1,5 @@
 import * as Ast from "../Ast"
-import { TokenKind, VariableToken } from "../Lexer"
+import { getToken, TokenKind, VariableToken } from "../Lexer"
 import type { Reader } from "../Reader"
 import { Reporter } from "../Reporter"
 import { TypeChecker, TypeCheckError, WithType, TypeName } from "../Types"
@@ -118,7 +118,7 @@ export class AstTypeChecker implements TypeChecker {
         if (expr1.type !== expr2.type) {
             const errMsg = getErrMsg?.(expr1, expr2)
             const typeError = this.reporter.formatTypeError(this.reader, expr1, expr2, errMsg)
-            this.errors.push(new TypeCheckError(typeError))
+            this.errors.push(new TypeCheckError(typeError, getToken(expr1)))
             return TypeName.NEVER
         }
         return expr1.type;

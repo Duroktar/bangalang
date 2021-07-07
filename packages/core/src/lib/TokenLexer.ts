@@ -1,5 +1,5 @@
 import type { Reader } from "../Reader"
-import { KeywordType, Lexer, LexerError, Position, Range, Token, TokenKind as _ } from "../Lexer"
+import { KeywordType, Kinded, Lexer, LexerError, Position, Range, Token, TokenKind as _ } from "../Lexer"
 
 export class TokenLexer implements Lexer<Token[]> {
     constructor(public reader: Reader) { }

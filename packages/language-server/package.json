@@ -1,6 +1,6 @@
 {
 	"name": "@bangalang/language-server",
-	"description": "A language server example",
+	"description": "Bangalang Language Server",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"version": "1.0.0",
@@ -17,7 +17,8 @@
 		"vscode": "^1.43.0"
 	},
 	"activationEvents": [
-		"onLanguage:bangalang"
+		"onLanguage:bangalang",
+		"workspaceContains:*.bl"
 	],
 	"main": "./client/out/extension",
 	"contributes": {
@@ -58,7 +59,7 @@
 						"messages",
 						"verbose"
 					],
-					"default": "off",
+					"default": "verbose",
 					"description": "Traces the communication between VS Code and the language server."
 				}
 			}
@@ -72,10 +73,13 @@
 		"test": "sh ./scripts/e2e.sh"
 	},
 	"devDependencies": {
+		"@bangalang/core": "^1.0",
+		"@types/debounce": "^1.2.0",
 		"@types/mocha": "^8.2.2",
 		"@types/node": "^12.12.0",
 		"@typescript-eslint/eslint-plugin": "^4.23.0",
 		"@typescript-eslint/parser": "^4.23.0",
+		"debounce": "^1.2.1",
 		"eslint": "^7.26.0",
 		"mocha": "^8.3.2",
 		"typescript": "^4.3.2"

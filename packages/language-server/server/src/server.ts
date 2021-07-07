@@ -11,15 +11,18 @@ import {
 	InitializeParams,
 	DidChangeConfigurationNotification,
 	CompletionItem,
-	CompletionItemKind,
 	TextDocumentPositionParams,
 	TextDocumentSyncKind,
-	InitializeResult
+	InitializeResult,
+	HoverParams,
+	HandlerResult,
+	Hover,
 } from 'vscode-languageserver/node';
 
-import {
-	TextDocument
-} from 'vscode-languageserver-textdocument';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { Position, Range } from '@bangalang/core';
+import { debounce } from 'debounce';
+import { findNode, getSourceData } from './checker';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -51,11 +54,13 @@ connection.onInitialize((params: InitializeParams) => {
 
 	const result: InitializeResult = {
 		capabilities: {
-			textDocumentSync: TextDocumentSyncKind.Incremental,
+			textDocumentSync: TextDocumentSyncKind.Full,
 			// Tell the client that this server supports code completion.
 			completionProvider: {
 				resolveProvider: true
-			}
+			},
+			// Tell the client that this server supports hover completion.
+			hoverProvider: true
 		}
 	};
 	if (hasWorkspaceFolderCapability) {
@@ -128,53 +133,38 @@ documents.onDidClose(e => {
 	documentSettings.delete(e.document.uri);
 });
 
+const validateTextDocumentDebounced = debounce(validateTextDocument, 200, true);
+
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
 documents.onDidChangeContent(change => {
-	validateTextDocument(change.document);
+	validateTextDocumentDebounced(change.document);
 });
 
+let sourceData: ReturnType<typeof getSourceData>;
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+	sourceData = getSourceData(textDocument.getText());
+	await transmitDocumentErrorData(textDocument);
+}
+
+async function transmitDocumentErrorData(textDocument: TextDocument): Promise<void> {
 	// In this simple example we get the settings for every validate run.
 	const settings = await getDocumentSettings(textDocument.uri);
 
-	// The validator creates diagnostics for all uppercase words length 2 and more
-	const text = textDocument.getText();
-	const pattern = /\b[A-Z]{2,}\b/g;
-	let m: RegExpExecArray | null;
-
 	let problems = 0;
 	const diagnostics: Diagnostic[] = [];
-	while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
+	for (const error of sourceData.errors) {
 		problems++;
 		const diagnostic: Diagnostic = {
 			severity: DiagnosticSeverity.Warning,
-			range: {
-				start: textDocument.positionAt(m.index),
-				end: textDocument.positionAt(m.index + m[0].length)
-			},
-			message: `${m[0]} is all uppercase.`,
-			source: 'ex'
+			range: vscodeRange(error.token.lineInfo),
+			message: error.message,
+			source: 'bangalang'
 		};
-		if (hasDiagnosticRelatedInformationCapability) {
-			diagnostic.relatedInformation = [
-				{
-					location: {
-						uri: textDocument.uri,
-						range: Object.assign({}, diagnostic.range)
-					},
-					message: 'Spelling matters'
-				},
-				{
-					location: {
-						uri: textDocument.uri,
-						range: Object.assign({}, diagnostic.range)
-					},
-					message: 'Particularly for names'
-				}
-			];
-		}
 		diagnostics.push(diagnostic);
+		if (problems >= settings.maxNumberOfProblems)
+			break;
 	}
 
 	// Send the computed diagnostics to VSCode.
@@ -189,20 +179,20 @@ connection.onDidChangeWatchedFiles(_change => {
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
 	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+		connection.console.log('onCompletion');
 		// The pass parameter contains the position of the text document in
-		// which code complete got requested. For the example we ignore this
-		// info and always provide the same completion items.
+		// which code complete got requested.
 		return [
-			{
-				label: 'TypeScript',
-				kind: CompletionItemKind.Text,
-				data: 1
-			},
-			{
-				label: 'JavaScript',
-				kind: CompletionItemKind.Text,
-				data: 2
-			}
+			// {
+			// 	label: 'TypeScript',
+			// 	kind: CompletionItemKind.Text,
+			// 	data: 1
+			// },
+			// {
+			// 	label: 'JavaScript',
+			// 	kind: CompletionItemKind.Text,
+			// 	data: 2
+			// }
 		];
 	}
 );
@@ -211,16 +201,62 @@ connection.onCompletion(
 // the completion list.
 connection.onCompletionResolve(
 	(item: CompletionItem): CompletionItem => {
-		if (item.data === 1) {
-			item.detail = 'TypeScript details';
-			item.documentation = 'TypeScript documentation';
-		} else if (item.data === 2) {
-			item.detail = 'JavaScript details';
-			item.documentation = 'JavaScript documentation';
-		}
+		connection.console.log('onCompletionResolve');
+		// if (item.data === 1) {
+		// 	item.detail = 'TypeScript details';
+		// 	item.documentation = 'TypeScript documentation';
+		// } else if (item.data === 2) {
+		// 	item.detail = 'JavaScript details';
+		// 	item.documentation = 'JavaScript documentation';
+		// }
 		return item;
 	}
 );
+
+connection.onHover(
+	(params: HoverParams): HandlerResult<Hover, void> => {
+		const line = params.position.line + 1;
+		const char = params.position.character + 1;
+
+		const tokens = sourceData.tokens.filter(t =>
+			t.lineInfo.start.line === line
+			&&
+			(t.lineInfo.start.col <= char && char <= t.lineInfo.end.col)
+		)
+			.sort((a, b) => (
+				(char - a.lineInfo.start.col) + (a.lineInfo.end.col - char))
+				-
+				((char - b.lineInfo.start.col) + (b.lineInfo.end.col - char))
+			);
+
+		const token = tokens[0];
+
+		const node = token
+			? findNode(sourceData.ast, token)
+			: null;
+
+		const msgContent = (token && node && node.type)
+			? `${node.toString()}: ${node.type.name}`
+			: sourceData.reader.getLineOfSource(token!.lineInfo);
+
+		return {
+			contents: [msgContent]
+		};
+	}
+);	
+
+function vscodeRange(lineInfo: Range) {
+    return {
+        start: vscodePostion(lineInfo.start),
+        end: vscodePostion(lineInfo.end)
+    };
+}
+
+function vscodePostion(position: Position) {
+    const line = position.line - 1;
+    const col = position.col - 1;
+    return { line, character: col };
+}
 
 // Make the text document manager listen on the connection
 // for open, change and close text document events

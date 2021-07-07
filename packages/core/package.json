@@ -2,7 +2,7 @@
   "name": "@bangalang/core",
   "description": "Bangalang project",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "build/index.js",
   "license": "MIT",
   "scripts": {
     "cli": "./scripts/bl",

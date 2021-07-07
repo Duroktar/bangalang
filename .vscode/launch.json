@@ -3,7 +3,7 @@
 	"version": "0.2.0",
 	"configurations": [
         {
-            "name": "Debug Core (cli.ts)",
+            "name": "Debug Bangalang Core (cli.ts)",
             "type": "node",
             "request": "launch",
             "args": [
@@ -20,20 +20,17 @@
 		{
 			"type": "extensionHost",
 			"request": "launch",
-			"name": "Launch Language Server (client)",
+			"name": "Launch Language Server Client",
 			"runtimeExecutable": "${execPath}",
 			"args": ["--extensionDevelopmentPath=${workspaceRoot}/packages/language-server"],
 			"outFiles": ["${workspaceRoot}/packages/language-server/client/out/**/*.js"],
-			"preLaunchTask": {
-				"type": "npm",
-				"script": "watch"
-			}
+			"preLaunchTask": "tsc: watch - language-server"
 		},
 		{
 			"type": "node",
 			"request": "attach",
-			"name": "Attach to Language Server (server)",
-			"port": 6009,
+			"name": "Attach to Language Server",
+			"port": 6099,
 			"restart": true,
 			"outFiles": ["${workspaceRoot}/packages/language-server/server/out/**/*.js"]
 		},
@@ -52,8 +49,8 @@
 	],
 	"compounds": [
 		{
-			"name": "Client + Server",
-			"configurations": ["Launch Language Server (client)", "Attach to Language Server (server)"]
+			"name": "Language Server: Client + Server",
+			"configurations": ["Launch Language Server Client", "Attach to Language Server"]
 		}
 	]
 }

@@ -4,7 +4,7 @@ import type { Token } from "./Lexer";
 export class TypeCheckError {
     constructor(
         public message: string,
-        public token?: Token,
+        public token: Token,
     ) {}
 }
 
@@ -18,6 +18,7 @@ export enum TypeName {
 }
 
 export type WithType<T> = T & { type: TypeName }
+export type Typed<T> = T & { type: { name: string; types: string[] } }
 
 export type TypedExpr = WithType<Expression>;
 
