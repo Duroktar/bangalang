@@ -35,6 +35,7 @@ export class TokenParser implements Parser<Token[], object[]> {
     }
 
     letDecl() {
+        const token = this.previous<TokenKind.LET>()
         const name = this.consume(TokenKind.IDENTIFIER, 'Expected variable name.')
 
         this.consume(TokenKind.EQUAL, "No un-initialized variables.")
@@ -43,7 +44,7 @@ export class TokenParser implements Parser<Token[], object[]> {
 
         this.consume(TokenKind.SEMI, "Expected ';' after declaration.")
 
-        return new Ast.LetDeclaration(name, init)
+        return new Ast.LetDeclaration(name, init, token)
     }
 
     statement() {

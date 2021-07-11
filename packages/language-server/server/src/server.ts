@@ -8,7 +8,6 @@ import {
 	Diagnostic,
 	DiagnosticSeverity,
 	ProposedFeatures,
-	InitializeParams,
 	DidChangeConfigurationNotification,
 	CompletionItem,
 	TextDocumentPositionParams,
@@ -20,22 +19,40 @@ import {
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Position, Range } from '@bangalang/core';
 import { debounce } from 'debounce';
-import { findNode, getSourceData } from './checker';
+import { hoverContentProvider } from './providers/hoverContentProvider';
+import { completionContentProvider, completionItemContentProvider } from './providers/completionContentProvider';
+import { sourceDiagnosticsProvider } from './providers/sourceDiagnosticsProvider';
+import { SourceDiagnostics } from './types';
+import { vscodeRange } from './utils';
+
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
 const connection = createConnection(ProposedFeatures.all);
 
 // Create a simple text document manager.
-const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
+const documents = new TextDocuments(TextDocument);
+
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
 
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
 
-connection.onInitialize((params: InitializeParams) => {
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+
+connection.onInitialize(params => {
 	const capabilities = params.capabilities;
 
 	// Does the client support the `workspace/configuration` request?
@@ -85,6 +102,11 @@ connection.onInitialized(() => {
 	}
 });
 
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+
 // The example settings
 interface ExampleSettings {
 	maxNumberOfProblems: number;
@@ -110,7 +132,7 @@ connection.onDidChangeConfiguration(change => {
 	}
 
 	// Revalidate all open text documents
-	documents.all().forEach(validateTextDocument);
+	documents.all().forEach(validateTextDocumentDebounced);
 });
 
 function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
@@ -128,12 +150,10 @@ function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
 	return result;
 }
 
-// Only keep settings for open documents
-documents.onDidClose(e => {
-	documentSettings.delete(e.document.uri);
-});
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 
-const validateTextDocumentDebounced = debounce(validateTextDocument, 200, true);
 
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
@@ -141,14 +161,31 @@ documents.onDidChangeContent(change => {
 	validateTextDocumentDebounced(change.document);
 });
 
-let sourceData: ReturnType<typeof getSourceData>;
+// Only keep settings for open documents
+documents.onDidClose(e => {
+	documentSettings.delete(e.document.uri);
+});
 
-async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-	sourceData = getSourceData(textDocument.getText());
-	await transmitDocumentErrorData(textDocument);
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+
+// TODO: should be in a class
+let sourceData: SourceDiagnostics;
+
+function setSourceData(to: SourceDiagnostics) {
+	sourceData = to;
 }
 
-async function transmitDocumentErrorData(textDocument: TextDocument): Promise<void> {
+async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+	setSourceData(
+		sourceDiagnosticsProvider(textDocument.getText())
+	);
+	await collectAndSendDiagnostics(textDocument);
+}
+
+async function collectAndSendDiagnostics(textDocument: TextDocument): Promise<void> {
 	// In this simple example we get the settings for every validate run.
 	const settings = await getDocumentSettings(textDocument.uri);
 
@@ -171,29 +208,25 @@ async function transmitDocumentErrorData(textDocument: TextDocument): Promise<vo
 	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
-connection.onDidChangeWatchedFiles(_change => {
+const validateTextDocumentDebounced = debounce(validateTextDocument, 200, true);
+
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+
+
+connection.onDidChangeWatchedFiles(event => {
 	// Monitored files have change in VSCode
 	connection.console.log('We received an file change event');
 });
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
-	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+	(params: TextDocumentPositionParams): CompletionItem[] => {
 		connection.console.log('onCompletion');
-		// The pass parameter contains the position of the text document in
-		// which code complete got requested.
-		return [
-			// {
-			// 	label: 'TypeScript',
-			// 	kind: CompletionItemKind.Text,
-			// 	data: 1
-			// },
-			// {
-			// 	label: 'JavaScript',
-			// 	kind: CompletionItemKind.Text,
-			// 	data: 2
-			// }
-		];
+		// The passed parameters contain the position in the text
+		// document for which the code completion got requested.
+		return completionContentProvider(params);
 	}
 );
 
@@ -201,62 +234,20 @@ connection.onCompletion(
 // the completion list.
 connection.onCompletionResolve(
 	(item: CompletionItem): CompletionItem => {
-		connection.console.log('onCompletionResolve');
-		// if (item.data === 1) {
-		// 	item.detail = 'TypeScript details';
-		// 	item.documentation = 'TypeScript documentation';
-		// } else if (item.data === 2) {
-		// 	item.detail = 'JavaScript details';
-		// 	item.documentation = 'JavaScript documentation';
-		// }
-		return item;
+		return completionItemContentProvider(item);
 	}
 );
 
 connection.onHover(
 	(params: HoverParams): HandlerResult<Hover, void> => {
-		const line = params.position.line + 1;
-		const char = params.position.character + 1;
-
-		const tokens = sourceData.tokens.filter(t =>
-			t.lineInfo.start.line === line
-			&&
-			(t.lineInfo.start.col <= char && char <= t.lineInfo.end.col)
-		)
-			.sort((a, b) => (
-				(char - a.lineInfo.start.col) + (a.lineInfo.end.col - char))
-				-
-				((char - b.lineInfo.start.col) + (b.lineInfo.end.col - char))
-			);
-
-		const token = tokens[0];
-
-		const node = token
-			? findNode(sourceData.ast, token)
-			: null;
-
-		const msgContent = (token && node && node.type)
-			? `${node.toString()}: ${node.type.name}`
-			: sourceData.reader.getLineOfSource(token!.lineInfo);
-
-		return {
-			contents: [msgContent]
-		};
+	return { contents: hoverContentProvider(params, sourceData) };
 	}
-);	
+);
 
-function vscodeRange(lineInfo: Range) {
-    return {
-        start: vscodePostion(lineInfo.start),
-        end: vscodePostion(lineInfo.end)
-    };
-}
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 
-function vscodePostion(position: Position) {
-    const line = position.line - 1;
-    const col = position.col - 1;
-    return { line, character: col };
-}
 
 // Make the text document manager listen on the connection
 // for open, change and close text document events

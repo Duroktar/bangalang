@@ -1,4 +1,4 @@
-import type { LiteralToken, OperatorToken, Token, VariableToken } from "./Lexer";
+import type { LiteralToken, OperatorToken, Token, TokenOf, VariableToken } from "./Lexer";
 import { TokenKind } from "./Lexer";
 import type { Visitable, Visitor } from "./Visitor";
 import { UNREACHABLE } from "./lib/utils";
@@ -22,6 +22,7 @@ export class LetDeclaration implements Visitable {
     constructor(
         public name: VariableToken,
         public init: Expression,
+        public token: TokenOf<TokenKind.LET>,
     ) { }
 
     accept = (visitor: Visitor) => {
