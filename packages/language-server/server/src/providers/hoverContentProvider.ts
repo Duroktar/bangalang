@@ -6,6 +6,8 @@ export function hoverContentProvider(params: HoverParams, sourceData: SourceDiag
 	const line = params.position.line + 1;
 	const char = params.position.character + 1;
 
+	const { ast, reader, tc } = sourceData;
+
 	const tokens = sourceData.tokens.filter(t => t.lineInfo.start.line === line
 		&&
 		(t.lineInfo.start.col <= char && char <= t.lineInfo.end.col)
@@ -19,12 +21,12 @@ export function hoverContentProvider(params: HoverParams, sourceData: SourceDiag
 	const token = tokens[0];
 
 	const node = token
-		? findNodeForToken(sourceData.ast, token)
+		? findNodeForToken(ast, token)
 		: null;
 
 	const msgContent = (token && node && node.type)
-		? `${node.toString()}: ${node.type.name}`
-		: sourceData.reader.getLineOfSource(token!.lineInfo);
+		? `${node.toString()}: ${tc.typeToString(node.type, token)}`
+		: reader.getLineOfSource(token!.lineInfo);
 
 	return [msgContent];
 }

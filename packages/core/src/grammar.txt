@@ -23,7 +23,9 @@ block          → "{" declaration* "}" ;
 
 expression     → assignment ;
 assignment     → IDENTIFIER "=" assignment | term ;
-term           → primary ( ( "-" | "+" ) primary )* ;
+term           → call ( ( "-" | "+" ) call )* ;
+call           → primary ( "(" arguments? ")" )* ;
+arguments      → expression ( "," expression )* ;
 primary        →
                 | "true" | "false"
                 | NUMBER | STRING | IDENTIFIER

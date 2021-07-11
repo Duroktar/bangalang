@@ -80,13 +80,46 @@ export class TokenParser implements Parser<Token[], object[]> {
     }
 
     term() {
-        let left: any = this.primary()
+        let left: any = this.call()
         while (this.match(TokenKind.PLUS, TokenKind.MINUS)) {
             const op = <OperatorToken>this.previous()
-            const right = this.primary()
+            const right = this.call()
             left = new Ast.BinaryExpr(left, op, right)
         }
         return left
+    }
+
+    call() {
+        let expr: Ast.Expression = this.primary();
+
+        while (true) { 
+            if (this.match(TokenKind.PAREN_OPEN)) {
+                expr = this.finishCall(expr);
+            } else {
+                break;
+            }
+        }
+    
+        return expr;
+    }
+
+    private finishCall(callee: Ast.Expression) {
+        const args: Ast.Expression[] = [];
+        if (!this.check(TokenKind.PAREN_CLOSE)) {
+          do {
+            if (args.length >= 255) {
+                const msg = "Can't have more than 255 arguments.";
+                throw new ParserError(msg, this.peek());
+            }
+            args.push(this.expression());
+          } while (this.match(TokenKind.COMMA));
+        }
+    
+        const paren = this.consume(TokenKind.PAREN_CLOSE,
+                              "Expected ')' after args.");
+    
+        return new Ast.CallExpr(callee, paren, args);
+        
     }
 
     primary() {

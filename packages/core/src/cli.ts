@@ -4,9 +4,9 @@ import { FileReader } from "./lib/FileReader"
 import { ConsoleLogger } from "./lib/ConsoleLogger"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
-import { HindleyMilner } from "./lib/HindleyMilner"
+import { GlobalTypes, HindleyMilner } from "./lib/HindleyMilner"
 import { ConsoleReporter } from "./lib/SysReporter"
-// import { AstTypeChecker } from "./lib/TypeChecker"
+import { StdLib } from "./lib/RuntimeLibrary"
 
 function main(args: string[]) {
     const debugMode = args.slice(1, -1)
@@ -27,14 +27,13 @@ function main(args: string[]) {
 
     reporter.reportParserErrors(parser, onError)
 
-    // const typeChecker = new AstTypeChecker(reader)
-    const typeChecker = new HindleyMilner(reader)
+    const typeChecker = new HindleyMilner(reader, GlobalTypes)
 
     const types = typeChecker.typecheck(ast)
 
     reporter.reportTypeErrors(typeChecker, onError)
 
-    const interpreter = new AstInterpreter(reader)
+    const interpreter = new AstInterpreter(reader, StdLib)
     const result = interpreter.execute(ast)
 
     if (debugMode)
@@ -53,5 +52,7 @@ function main(args: string[]) {
 }
 
 // main(process.argv)
-main(['', '', '-D', '/Users/duroktar/code/BangaLang/tests/another-test-file.bl'])
-// main(['', '', '-D', '/Users/duroktar/code/BangaLang/tests/simple-test.bl'])
+// main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/another-test-file.bl'])
+// main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/simple-test.bl'])
+// main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test.bl'])
+main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-2.bl'])

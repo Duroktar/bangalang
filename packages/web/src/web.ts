@@ -1,12 +1,5 @@
 import ObjectExplorer from "./object-explorer"
-import { AstInterpreter } from "./lib/AstInterpreter"
-import { SourceReader } from "./lib/SourceReader"
-import { ConsoleLogger } from "./lib/ConsoleLogger"
-import { TokenLexer } from "./lib/TokenLexer"
-import { TokenParser } from "./lib/TokenParser"
-import { HindleyMilner } from "./lib/HindleyMilner"
-import { WebReporter } from "./lib/WebReporter"
-
+import { AstInterpreter, ConsoleLogger, HindleyMilner, SourceReader, TokenLexer, TokenParser, WebReporter } from "@bangalang/core"
 
 const inputEl = document.querySelector<HTMLInputElement>('#input')!;
 const outputEl = document.querySelector<HTMLDivElement>('.output')!;

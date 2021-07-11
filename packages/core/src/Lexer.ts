@@ -10,35 +10,42 @@ export class LexerError {
 }
 
 
+
+
 export enum TokenKind {
     // literals
-    STRING ='string',
-    NUMBER ='number',
-    IDENTIFIER ='identifier',
+    STRING = 'string',
+    NUMBER = 'number',
+    IDENTIFIER = 'identifier',
 
     // single character tokens
-    PAREN_OPEN ='paren_open',
-    PAREN_CLOSE ='paren_close',
-    SEMI ='semi',
-    PLUS ='plus',
-    MINUS ='minus',
-    STAR ='star',
+    PAREN_OPEN = 'paren_open',
+    PAREN_CLOSE = 'paren_close',
+    SEMI = 'semi',
+    PLUS = 'plus',
+    MINUS = 'minus',
+    STAR = 'star',
     SLASH = 'slash',
     EQUAL = 'equal',
+    COMMA = "comma",
 
     // keywords
     TRUE = 'true',
     FALSE = 'false',
     LET = 'let',
 
+    // -- temporary
+    PRINT = 'print',
+
     // --
-    EOF = '<EOF>'
+    EOF = '<EOF>',
 }
 
 export const KeywordTypes = [
     TokenKind.TRUE,
     TokenKind.FALSE,
     TokenKind.LET,
+    TokenKind.PRINT,
 ] as const
 
 export type KeywordType = typeof KeywordTypes[number]
@@ -48,6 +55,7 @@ export type StringToken = TokenOf<TokenKind.STRING>
 export type IdentifierToken = TokenOf<TokenKind.IDENTIFIER>
 export type TrueToken = TokenOf<TokenKind.TRUE>
 export type FalseToken = TokenOf<TokenKind.FALSE>
+export type PrintToken = TokenOf<TokenKind.PRINT>
 
 export type LiteralToken =
     | NumberToken
@@ -94,6 +102,8 @@ export type Token = (
     | Kinded<TokenKind.STAR>
     | Kinded<TokenKind.SLASH>
     | Kinded<TokenKind.EQUAL>
+    | Kinded<TokenKind.COMMA>
+    | Kinded<TokenKind.PRINT>
     | Kinded<TokenKind.LET>
     | Kinded<TokenKind.EOF>
 ) & LineInfo
@@ -110,7 +120,7 @@ export interface Lexer<T> {
 const newWithLineInfo = <T extends Token>(expr: T, r: Range) =>
     Object.assign(expr, { lineInfo: r })
 
-export function getToken(expr: Ast.Statement | Ast.Expression): Token {
+export function getToken(expr: Ast.AstNode): Token {
     if (expr instanceof Ast.LiteralExpr) {
         return expr.token
     }
@@ -140,6 +150,10 @@ export function getToken(expr: Ast.Statement | Ast.Expression): Token {
 
     if (expr instanceof Ast.ExpressionStmt) {
         return expr.token
+    }
+
+    if (expr instanceof Ast.CallExpr) {
+        return expr.paren
     }
 
     throw new Error('No token found for: ' + UNREACHABLE(expr))

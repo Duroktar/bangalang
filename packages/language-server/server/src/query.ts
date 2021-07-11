@@ -1,4 +1,4 @@
-import { AssignExpr, BinaryExpr, Expression, ExpressionStmt, GroupingExpr, LetDeclaration, LiteralExpr, Program, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
+import { AssignExpr, AstNode, BinaryExpr, CallExpr, Expression, ExpressionStmt, GroupingExpr, LetDeclaration, LiteralExpr, Program, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
 
 type QueryData = Program | Statement | Expression;
 
@@ -58,6 +58,12 @@ class QueryVisitor implements Visitor {
         const right = node.right?.accept(this);
         return left ?? right;
     }
+    visitCallExpr(node: CallExpr): any{
+        if (node.paren === this.target) {
+            return node;
+        }
+        return node.callee?.accept(this);
+    }
 }
 
 class QuerySelectorAllVisitor implements Visitor {
@@ -68,7 +74,7 @@ class QuerySelectorAllVisitor implements Visitor {
             .map(s => s.trim().replace(/^(\.){1}/, ''));
     }
 
-    query(source: QueryData): (Statement | Expression)[] {
+    query(source: QueryData): (AstNode)[] {
         const program = Array.isArray(source) ? source : [source];
         for (const stmt of program) {
             stmt?.accept(this);
@@ -111,8 +117,16 @@ class QuerySelectorAllVisitor implements Visitor {
         node.right?.accept(this);
     }
 
+    visitCallExpr(node: CallExpr): any{
+        if (this._selectors.includes(node.paren.kind)) {
+            this._selected.push(node);
+        }
+        node.args.forEach(arg =>arg.accept(this));
+        node.callee?.accept(this);
+    }
+
     private _selectors: string[];
-    private _selected: (Expression | Statement)[] = [];
+    private _selected: AstNode[] = [];
 }
 
 export function findNodeForToken(program: QueryData, token: Token) {

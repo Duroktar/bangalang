@@ -4,9 +4,9 @@ import { Reader } from '../Reader';
 import { TypeChecker, TypeCheckError, TypeName } from '../Types';
 import { format, UNREACHABLE, zip } from "./utils";
 
-type Env = Record<string, TyVar>
+export type Env = Record<string, TyVar>
 
-type TyVar =
+export type TyVar =
     | TypeVariable
     | TypeOperator
 
@@ -30,13 +30,19 @@ export const strType = new TypeOperator(TypeName.STRING)
 export const boolType = new TypeOperator(TypeName.BOOLEAN)
 export const anyType = new TypeOperator(TypeName.ANY)
 export const neverType = new TypeOperator(TypeName.NEVER)
+export const FunctionType =
+    (argType: TyVar, retType: TyVar) => new TypeOperator('->', [argType, retType])
 
 export class HindleyMilner implements TypeChecker {
-    constructor(public reader: Reader) {}
+    constructor(
+        public reader: Reader,
+        public globals: BuiltinTypes,
+    ) {}
 
     public errors: TypeCheckError[] = []
 
     typecheck(ast: Ast.Program, env: Env = {}) {
+        Object.assign(env, this.globals)
         let types: string[] = []
         for (let expr of ast) {
             if (expr == null)
@@ -46,7 +52,7 @@ export class HindleyMilner implements TypeChecker {
         return types
     }
 
-    tryExpr(term: Ast.Statement, env: Env) {
+    tryExpr(term: Ast.AstNode, env: Env) {
         try {
             let t = this.analyze(term, env)
             return this.typeToString(t, getToken(term))
@@ -59,8 +65,8 @@ export class HindleyMilner implements TypeChecker {
         }
     }
 
-    analyze(term: Ast.Statement | Ast.Expression, env: Env): TyVar {
-        let analyzeRec = (term: Ast.Statement | Ast.Expression, env: Env, nonGeneric: unknown): TyVar => {
+    analyze(term: Ast.AstNode, env: Env): TyVar {
+        let analyzeRec = (term: Ast.AstNode, env: Env, nonGeneric: unknown): TyVar => {
             if (term.kind === 'VariableExpr') {
                 const type = this.getType(term.name, env, nonGeneric, getToken(term))
                 return Object.assign(term, { type }).type
@@ -94,6 +100,15 @@ export class HindleyMilner implements TypeChecker {
             if (term.kind === 'LiteralExpr') {
                 const type = this.getLiteralType(term, env, nonGeneric)
                 return Object.assign(term, { type }).type
+            }
+            if (term.kind === 'CallExpr') {
+                let funcType = analyzeRec(term.callee, env, nonGeneric)
+                let [firstArg, ...restArgs] = term.args;
+                let argType = analyzeRec(firstArg, env, nonGeneric);
+                let retType = this.mkVariable();
+                this.unify(FunctionType(argType, retType), funcType, term);
+                Object.assign(term, { type: funcType }).type;
+                return retType;
             }
 
             UNREACHABLE(term)
@@ -226,24 +241,6 @@ export class HindleyMilner implements TypeChecker {
         return t.name
     }
 
-    termToString(term: Ast.Statement | Ast.Expression): string {
-        switch (term.kind) {
-            case 'ExpressionStmt':
-                return this.termToString(term.expr)
-            case 'VariableExpr':
-                return term.name
-            case 'LiteralExpr':
-                return <string>term.value
-            case 'LetDeclaration':
-                return term.name.value
-            default: {
-                let msg = 'Unreachable termToString: '
-                throw new TypeError(msg + term.kind)
-            }
-        }
-    }
-
-
     private _next_variable_id = 0
     private _next_unique_name = 'a'
 
@@ -252,4 +249,10 @@ export class HindleyMilner implements TypeChecker {
 
     private mkVariable = (): TypeVariable =>
         new TypeVariable(this._next_variable_id++)
+}
+
+export type BuiltinTypes = typeof GlobalTypes;
+
+export const GlobalTypes: Env = {
+    print: FunctionType(strType, intType)
 }

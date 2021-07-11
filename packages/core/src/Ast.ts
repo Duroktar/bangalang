@@ -4,15 +4,23 @@ import type { Visitable, Visitor } from "./Visitor";
 import { UNREACHABLE } from "./lib/utils";
 
 export type Program =
-    | Statement[]
+    | AstNode[]
+
+export type AstNode =
+    | Declaration
+
+export type Declaration =
+    | LetDeclaration
+    | Statement
 
 export type Statement =
-    | LetDeclaration
     | ExpressionStmt
+    | Expression
 
 export type Expression =
     | AssignExpr
     | BinaryExpr
+    | CallExpr
     | LiteralExpr
     | VariableExpr
     | GroupingExpr
@@ -29,7 +37,7 @@ export class LetDeclaration implements Visitable {
         return visitor.visitLetDeclaration(this);
     };
 
-    toString() { return this.name.value }
+    toString(): string { return this.name.value }
 }
 
 export class ExpressionStmt implements Visitable {
@@ -43,7 +51,7 @@ export class ExpressionStmt implements Visitable {
         return visitor.visitExpressionStmt(this);
     };
 
-    toString() { return this.expr.toString() }
+    toString(): string { return this.expr.toString() }
 }
 
 export class AssignExpr implements Visitable {
@@ -57,7 +65,7 @@ export class AssignExpr implements Visitable {
         return visitor.visitAssignExpr(this);
     };
 
-    toString() { return this.name.value }
+    toString(): string { return this.name.value }
 }
 
 export class BinaryExpr implements Visitable {
@@ -72,7 +80,26 @@ export class BinaryExpr implements Visitable {
         return visitor.visitBinaryExpr(this);
     };
 
-    toString() { return opKindToString(this.op.kind) }
+    toString(): string { return opKindToString(this.op.kind) }
+}
+
+export class CallExpr implements Visitable {
+    public kind = 'CallExpr' as const
+    constructor(
+        public callee: Expression,
+        public paren: TokenOf<TokenKind.PAREN_CLOSE>,
+        public args: Expression[],
+    ) { }
+
+    accept = (visitor: Visitor) => {
+        return visitor.visitCallExpr(this);
+    };
+
+    toString(): string {
+        const callee = this.callee.toString();
+        const args = this.args.map(o => o.toString());
+        return `${callee}(${args.join(', ')});`;
+    }
 }
 
 export class LiteralExpr implements Visitable {
@@ -87,7 +114,7 @@ export class LiteralExpr implements Visitable {
         return visitor.visitLiteralExpr(this);
     };
 
-    toString() { return this.value + '' }
+    toString(): string { return this.value + '' }
 }
 
 export class VariableExpr implements Visitable {
@@ -101,7 +128,7 @@ export class VariableExpr implements Visitable {
         return visitor.visitVariableExpr(this);
     };
 
-    toString() { return this.name }
+    toString(): string { return this.name }
 }
 
 export class GroupingExpr implements Visitable {
@@ -115,16 +142,17 @@ export class GroupingExpr implements Visitable {
         return visitor.visitGroupingExpr(this);
     };
 
-    toString() { return '( ... )' }
+    toString(): string { return `( ${this.expr.toString()} )` }
 }
 
 export function kindName(kind: Expression['kind']): string {
     switch (kind) {
         case 'AssignExpr': return 'variable';
-        case 'BinaryExpr': return 'binary expression';
+        case 'BinaryExpr': return 'binary';
         case 'GroupingExpr': return 'group';
         case 'LiteralExpr': return 'literal';
         case 'VariableExpr': return 'variable';
+        case 'CallExpr': return 'call';
         default:
             return UNREACHABLE(kind)
     }

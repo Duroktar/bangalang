@@ -4,3 +4,7 @@ export interface Logger {
     warn(...args: any[]): void;
     error(...args: any[]): void;
 }
+
+export interface Printable{
+    toString(): string;
+};

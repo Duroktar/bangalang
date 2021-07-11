@@ -1,12 +1,18 @@
 import type * as Ast from "../Ast";
 import { TokenKind, VariableToken } from "../Lexer";
 import type { Reader } from "../Reader";
+import { BangaCallable, Environment, RuntimeError } from "../Runtime";
 import type { Visitable, Visitor } from "../Visitor";
+import { format, is } from "./utils";
 
 export class AstInterpreter implements Visitor {
-    public env: Map<string, any> = new Map()
+    public globals: Map<string, any> = new Map()
+    public env: Map<string, any> = this.globals;
 
-    constructor(private reader: Reader) {}
+    constructor(private reader: Reader, env: Environment) {
+        Object.entries(env)
+            .map(([key, func]) => this.globals.set(key, func))
+    }
 
     public execute(instructions: Ast.Program): any {
         const rv: any[] = []
@@ -44,6 +50,23 @@ export class AstInterpreter implements Visitor {
 
     visitLiteralExpr(node: Ast.LiteralExpr) {
         return node.token.value
+    }
+
+    visitCallExpr(node: Ast.CallExpr): any {
+        const callee = this.evaluate(node.callee);
+        const args: Ast.Expression[] = [];
+        for (let arg of node.args) {
+            args.push(this.evaluate(arg))
+        }
+        if (!(is<BangaCallable>(callee))) {
+            throw new RuntimeError(node.paren, "Expected ");
+        }
+        if (!callee.checkArity(args.length)) {
+            const msg = "Expected {0} arguments but got {1}.";
+            const err = format(msg, callee.arity(), args.length);
+            throw new RuntimeError(node.paren, err);
+        }
+        return callee.call(this, args);
     }
 
     visitBinaryExpr(node: Ast.BinaryExpr) {

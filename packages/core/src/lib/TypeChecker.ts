@@ -13,7 +13,7 @@ export class AstTypeChecker implements TypeChecker {
     constructor(public reader: Reader, public reporter: Reporter) {}
 
     typecheck(declarations: Ast.Program) {
-        const rv: WithType<Ast.Statement>[] = []
+        const rv: WithType<Ast.AstNode>[] = []
         for (let decl of declarations) {
             rv.push(this.visit(decl))
         }
@@ -67,6 +67,11 @@ export class AstTypeChecker implements TypeChecker {
         return Object.assign(node, type)
     }
 
+    visitCallExpr(node: Ast.CallExpr) {
+        const type = { type: this.infer(node) }
+        return Object.assign(node, type)
+    }
+
     visitBinaryExpr(node: Ast.BinaryExpr) {
         const left = this.visit(node.left)
         const right = this.visit(node.right)
@@ -74,7 +79,7 @@ export class AstTypeChecker implements TypeChecker {
         return Object.assign(node, type)
     }
 
-    infer(expr: Ast.Expression | Ast.Statement): TypeName {
+    infer(expr: Ast.AstNode): TypeName {
         if (expr instanceof Ast.LiteralExpr) {
             switch (expr.token.kind) {
                 case TokenKind.NUMBER:
@@ -96,6 +101,7 @@ export class AstTypeChecker implements TypeChecker {
         if (
             expr instanceof Ast.BinaryExpr     ||
             expr instanceof Ast.AssignExpr     ||
+            expr instanceof Ast.CallExpr       ||
             expr instanceof Ast.VariableExpr   ||
             expr instanceof Ast.GroupingExpr   ||
             expr instanceof Ast.LetDeclaration ||
