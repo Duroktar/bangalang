@@ -12,6 +12,66 @@ export class LexerError {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export enum TokenKind {
     // literals
     STRING = 'string',
@@ -19,8 +79,10 @@ export enum TokenKind {
     IDENTIFIER = 'identifier',
 
     // single character tokens
-    PAREN_OPEN = 'paren_open',
-    PAREN_CLOSE = 'paren_close',
+    LEFT_PAREN = 'left_paren',
+    RIGHT_PAREN = 'right_paren',
+    LEFT_BRACE = 'left_brace',
+    RIGHT_BRACE = 'right_brace',
     SEMI = 'semi',
     PLUS = 'plus',
     MINUS = 'minus',
@@ -33,6 +95,8 @@ export enum TokenKind {
     TRUE = 'true',
     FALSE = 'false',
     LET = 'let',
+    FUNC = 'func',
+    RETURN = 'return',
 
     // -- temporary
     PRINT = 'print',
@@ -45,6 +109,8 @@ export const KeywordTypes = [
     TokenKind.TRUE,
     TokenKind.FALSE,
     TokenKind.LET,
+    TokenKind.FUNC,
+    TokenKind.RETURN,
     TokenKind.PRINT,
 ] as const
 
@@ -94,8 +160,10 @@ export type Token = (
     | Kinded<TokenKind.IDENTIFIER, { value: string; }>
     | Kinded<TokenKind.TRUE,       { value: string; }>
     | Kinded<TokenKind.FALSE,      { value: string; }>
-    | Kinded<TokenKind.PAREN_OPEN>
-    | Kinded<TokenKind.PAREN_CLOSE>
+    | Kinded<TokenKind.LEFT_PAREN>
+    | Kinded<TokenKind.RIGHT_PAREN>
+    | Kinded<TokenKind.LEFT_BRACE>
+    | Kinded<TokenKind.RIGHT_BRACE>
     | Kinded<TokenKind.SEMI>
     | Kinded<TokenKind.PLUS>
     | Kinded<TokenKind.MINUS>
@@ -103,8 +171,10 @@ export type Token = (
     | Kinded<TokenKind.SLASH>
     | Kinded<TokenKind.EQUAL>
     | Kinded<TokenKind.COMMA>
-    | Kinded<TokenKind.PRINT>
+    | Kinded<TokenKind.FUNC>
     | Kinded<TokenKind.LET>
+    | Kinded<TokenKind.RETURN>
+    | Kinded<TokenKind.PRINT>
     | Kinded<TokenKind.EOF>
 ) & LineInfo
 
@@ -154,6 +224,14 @@ export function getToken(expr: Ast.AstNode): Token {
 
     if (expr instanceof Ast.CallExpr) {
         return expr.paren
+    }
+
+    if (expr instanceof Ast.FuncDeclaration) {
+        return expr.name
+    }
+
+    if (expr instanceof Ast.BlockStmt) {
+        return getToken(expr.stmts[0])
     }
 
     throw new Error('No token found for: ' + UNREACHABLE(expr))

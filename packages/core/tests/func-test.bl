@@ -1,0 +1,6 @@
+
+func sayhi(a) {
+    print(a);
+}
+
+sayhi(8);

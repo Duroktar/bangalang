@@ -14,6 +14,14 @@ export class AstInterpreter implements Visitor {
             .map(([key, func]) => this.globals.set(key, func))
     }
 
+    visitFuncDeclaration(node: Ast.FuncDeclaration) {
+        throw new Error("Method not implemented.");
+    }
+
+    visitBlockStmt(node: Ast.BlockStmt) {
+        throw new Error("Method not implemented.");
+    }
+
     public execute(instructions: Ast.Program): any {
         const rv: any[] = []
         for (const line of instructions) {

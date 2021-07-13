@@ -12,6 +12,14 @@ export class AstTypeChecker implements TypeChecker {
 
     constructor(public reader: Reader, public reporter: Reporter) {}
 
+    visitFuncDeclaration(node: Ast.FuncDeclaration) {
+        throw new Error("Method not implemented.");
+    };
+
+    visitBlockStmt(node: Ast.BlockStmt) {
+        throw new Error("Method not implemented.");
+    };
+
     typecheck(declarations: Ast.Program) {
         const rv: WithType<Ast.AstNode>[] = []
         for (let decl of declarations) {
@@ -100,11 +108,13 @@ export class AstTypeChecker implements TypeChecker {
 
         if (
             expr instanceof Ast.BinaryExpr     ||
+            expr instanceof Ast.BlockStmt      ||
             expr instanceof Ast.AssignExpr     ||
             expr instanceof Ast.CallExpr       ||
             expr instanceof Ast.VariableExpr   ||
             expr instanceof Ast.GroupingExpr   ||
             expr instanceof Ast.LetDeclaration ||
+            expr instanceof Ast.FuncDeclaration||
             expr instanceof Ast.ExpressionStmt
         ) {
             return (<WithType<typeof expr>>expr).type

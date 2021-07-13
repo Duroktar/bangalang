@@ -2,9 +2,10 @@ import type * as Ast from "./Ast";
 import { Printable } from "./Logger";
 
 export interface Visitor {
-    visitCallExpr(arg: Ast.CallExpr): any;
     visitExpressionStmt(node: Ast.ExpressionStmt): any
+    visitFuncDeclaration(node: Ast.FuncDeclaration): any;
     visitLetDeclaration(node: Ast.LetDeclaration): any
+    visitBlockStmt(node: Ast.BlockStmt): any;
     visitGroupingExpr(node: Ast.GroupingExpr): any
     visitLiteralExpr(node: Ast.LiteralExpr): any
     visitVariableExpr(node: Ast.VariableExpr): any

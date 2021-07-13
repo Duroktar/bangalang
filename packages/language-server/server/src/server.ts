@@ -195,7 +195,7 @@ async function collectAndSendDiagnostics(textDocument: TextDocument): Promise<vo
 		problems++;
 		const diagnostic: Diagnostic = {
 			severity: DiagnosticSeverity.Warning,
-			range: vscodeRange(error.token.lineInfo),
+			range: vscodeRange(error.token!.lineInfo),
 			message: error.message,
 			source: 'bangalang'
 		};
@@ -226,7 +226,7 @@ connection.onCompletion(
 		connection.console.log('onCompletion');
 		// The passed parameters contain the position in the text
 		// document for which the code completion got requested.
-		return completionContentProvider(params);
+		return completionContentProvider(params, sourceData);
 	}
 );
 
@@ -234,7 +234,7 @@ connection.onCompletion(
 // the completion list.
 connection.onCompletionResolve(
 	(item: CompletionItem): CompletionItem => {
-		return completionItemContentProvider(item);
+		return completionItemContentProvider(item, sourceData);
 	}
 );
 

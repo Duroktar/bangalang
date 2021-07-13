@@ -1,4 +1,4 @@
-import type { HindleyMilner, ParserError, Program, SourceReader, Token, TypeCheckError } from '@bangalang/core';
+import type { HindleyMilner, ParserError, Program, SourceReader, Token, TypeCheckError, TypeEnv } from '@bangalang/core';
 
 export type SourceDiagnostics = {
     tokens: Token[];
@@ -6,5 +6,6 @@ export type SourceDiagnostics = {
     types: string[];
     reader: SourceReader;
     tc: HindleyMilner;
+    typeEnv: TypeEnv;
     errors: (ParserError | TypeCheckError)[];
 };

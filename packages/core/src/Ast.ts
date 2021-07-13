@@ -10,11 +10,13 @@ export type AstNode =
     | Declaration
 
 export type Declaration =
+    | FuncDeclaration
     | LetDeclaration
     | Statement
 
 export type Statement =
     | ExpressionStmt
+    | BlockStmt
     | Expression
 
 export type Expression =
@@ -24,6 +26,22 @@ export type Expression =
     | LiteralExpr
     | VariableExpr
     | GroupingExpr
+
+export class FuncDeclaration implements Visitable {
+    public kind = 'FuncDeclaration' as const
+    constructor(
+        public name: VariableToken,
+        public params: VariableToken[],
+        public body: BlockStmt,
+        public func: TokenOf<TokenKind.FUNC>,
+    ) { }
+
+    accept = (visitor: Visitor) => {
+        return visitor.visitFuncDeclaration(this);
+    };
+
+    toString(): string { return this.name.value }
+}
 
 export class LetDeclaration implements Visitable {
     public kind = 'LetDeclaration' as const
@@ -87,7 +105,7 @@ export class CallExpr implements Visitable {
     public kind = 'CallExpr' as const
     constructor(
         public callee: Expression,
-        public paren: TokenOf<TokenKind.PAREN_CLOSE>,
+        public paren: TokenOf<TokenKind.RIGHT_PAREN>,
         public args: Expression[],
     ) { }
 
@@ -143,6 +161,19 @@ export class GroupingExpr implements Visitable {
     };
 
     toString(): string { return `( ${this.expr.toString()} )` }
+}
+
+export class BlockStmt implements Visitable {
+    public kind = 'BlockStmt' as const
+    constructor(
+        public stmts: Statement[],
+    ) { }
+
+    accept = (visitor: Visitor) => {
+        return visitor.visitBlockStmt(this);
+    };
+
+    toString(): string { return `{\n${this.stmts.map(o => o.toString())}\n}` }
 }
 
 export function kindName(kind: Expression['kind']): string {

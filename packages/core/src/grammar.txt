@@ -15,17 +15,21 @@ token:
 program        → declaration* EOF ;
 
 declaration    → letDecl | statement ;
+funDecl        → "func" function ;
 letDecl        → "let" IDENTIFIER ( "=" expression )? ";" ;
 
 statement      → exprStmt | block ;
 exprStmt       → expression ";" ;
 block          → "{" declaration* "}" ;
 
+function       → IDENTIFIER "(" parameters? ")" block ;
+parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
+arguments      → expression ( "," expression )* ;
+
 expression     → assignment ;
 assignment     → IDENTIFIER "=" assignment | term ;
 term           → call ( ( "-" | "+" ) call )* ;
 call           → primary ( "(" arguments? ")" )* ;
-arguments      → expression ( "," expression )* ;
 primary        →
                 | "true" | "false"
                 | NUMBER | STRING | IDENTIFIER

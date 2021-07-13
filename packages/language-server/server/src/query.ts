@@ -1,4 +1,4 @@
-import { AssignExpr, AstNode, BinaryExpr, CallExpr, Expression, ExpressionStmt, GroupingExpr, LetDeclaration, LiteralExpr, Program, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
+import { AssignExpr, AstNode, BinaryExpr, BlockStmt, CallExpr, Expression, ExpressionStmt, FuncDeclaration, GroupingExpr, LetDeclaration, LiteralExpr, Program, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
 
 type QueryData = Program | Statement | Expression;
 
@@ -64,6 +64,24 @@ class QueryVisitor implements Visitor {
         }
         return node.callee?.accept(this);
     }
+    visitFuncDeclaration(node: FuncDeclaration): any {
+        if (node.name === this.target) {
+            return node;
+        }
+        for (const param of node.params) {
+            if (param === this.target) {
+                return param;
+            }
+        }
+        return node.body.accept(this);
+    }
+    visitBlockStmt(node: BlockStmt): any {
+        for (const stmt of node.stmts) {
+            const res: AstNode = stmt.accept(this);
+            if (res) { return res; }
+        }
+        return null;
+    }
 }
 
 class QuerySelectorAllVisitor implements Visitor {
@@ -74,7 +92,7 @@ class QuerySelectorAllVisitor implements Visitor {
             .map(s => s.trim().replace(/^(\.){1}/, ''));
     }
 
-    query(source: QueryData): (AstNode)[] {
+    query(source: QueryData): (AstNode | Token)[] {
         const program = Array.isArray(source) ? source : [source];
         for (const stmt of program) {
             stmt?.accept(this);
@@ -124,9 +142,27 @@ class QuerySelectorAllVisitor implements Visitor {
         node.args.forEach(arg =>arg.accept(this));
         node.callee?.accept(this);
     }
+    visitFuncDeclaration(node: FuncDeclaration): any {
+        if (this._selectors.includes(node.name.kind)) {
+            this._selected.push(node);
+        }
+        node.params.forEach(param => {
+            if (this._selectors.includes(param.kind)) {
+                this._selected.push(param);
+            }
+        });
+        node.body.accept(this);
+    }
+    visitBlockStmt(node: BlockStmt): any {
+        node.stmts.forEach(stmt => {
+            if (this._selectors.includes(stmt.kind)) {
+                this._selected.push(stmt);
+            }
+        });
+    }
 
     private _selectors: string[];
-    private _selected: AstNode[] = [];
+    private _selected: (AstNode | Token)[] = [];
 }
 
 export function findNodeForToken(program: QueryData, token: Token) {

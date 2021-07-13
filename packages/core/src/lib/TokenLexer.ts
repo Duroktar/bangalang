@@ -9,8 +9,10 @@ export class TokenLexer implements Lexer<Token[]> {
             const current = this.peek()
 
             switch (current) {
-                case '(': this.addToken(_.PAREN_OPEN); break;
-                case ')': this.addToken(_.PAREN_CLOSE); break;
+                case '(': this.addToken(_.LEFT_PAREN); break;
+                case ')': this.addToken(_.RIGHT_PAREN); break;
+                case '{': this.addToken(_.LEFT_BRACE); break;
+                case '}': this.addToken(_.RIGHT_BRACE); break;
                 case ';': this.addToken(_.SEMI); break;
                 case '+': this.addToken(_.PLUS); break;
                 case '-': this.addToken(_.MINUS); break;
@@ -172,6 +174,7 @@ const keywordTypeMap = {
     'true': _.TRUE,
     'false': _.FALSE,
     'let': _.LET,
+    'func': _.FUNC,
 } as ObjOf<KeywordType>;
 
 function getKeywordType(op: string) {

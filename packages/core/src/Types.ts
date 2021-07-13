@@ -1,11 +1,11 @@
 import type { Program, Expression } from "./Ast";
 import type { Token } from "./Lexer";
-import { Env, TyVar } from "./lib/HindleyMilner";
+import { TypeEnv, TyVar } from "./lib/HindleyMilner";
 
 export class TypeCheckError {
     constructor(
         public message: string,
-        public token: Token,
+        public token?: Token,
     ) {}
 }
 
@@ -24,6 +24,6 @@ export type Typed<T> = T & { type: TyVar }
 export type TypedExpr = WithType<Expression>;
 
 export interface TypeChecker {
-    typecheck(ast: Program, env: Env): any
+    typecheck(ast: Program, env?: TypeEnv): any
     errors: TypeCheckError[]
 }

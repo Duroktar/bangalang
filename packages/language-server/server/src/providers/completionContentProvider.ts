@@ -1,4 +1,6 @@
 import { CompletionItem, TextDocumentPositionParams, CompletionItemKind } from 'vscode-languageserver/node';
+import { HindleyMilner } from '@bangalang/core';
+import { SourceDiagnostics } from '../types';
 
 export const completions: Record<string, CompletionItem> = {
 	let: {
@@ -12,13 +14,20 @@ export const completions: Record<string, CompletionItem> = {
 
 export function completionContentProvider(
 	params: TextDocumentPositionParams,
+	sourceData: SourceDiagnostics,
 ): CompletionItem[] {
-	return Object.values(completions);
+	const fromTypeEnv = Object.entries(sourceData.typeEnv.map).map(([key, value]) => ({
+		label: key,
+		kind: CompletionItemKind.Variable,
+		data: key,
+		detail: `${key}: ${sourceData.tc.typeToString(value)}`
+	}));
+	return Object.values(completions).concat(fromTypeEnv);
 }
 
 export function completionItemContentProvider(
 	item: CompletionItem,
-	context?: any,
+	sourceData: SourceDiagnostics,
 ): CompletionItem {
 	const data = {};
 	return Object.assign(item, data);

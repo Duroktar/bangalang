@@ -25,7 +25,7 @@ export function hoverContentProvider(params: HoverParams, sourceData: SourceDiag
 		: null;
 
 	const msgContent = (token && node && node.type)
-		? `${node.toString()}: ${tc.typeToString(node.type, token)}`
+		? `${node.toString()}: ${tc.typeToString(node.type)}`
 		: reader.getLineOfSource(token!.lineInfo);
 
 	return [msgContent];

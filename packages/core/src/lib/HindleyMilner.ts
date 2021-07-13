@@ -1,14 +1,18 @@
 import type * as Ast from '../Ast';
+import { FuncDeclaration } from '../Ast';
 import { getToken, lineInfo, Token } from '../Lexer';
 import { Reader } from '../Reader';
 import { TypeChecker, TypeCheckError, TypeName } from '../Types';
 import { format, UNREACHABLE, zip } from "./utils";
 
-export type Env = Record<string, TyVar>
 
 export type TyVar =
     | TypeVariable
     | TypeOperator
+
+
+export type Scheme =
+    | ForAll
 
 class TypeVariable {
     constructor(
@@ -25,6 +29,13 @@ class TypeOperator {
     ) {}
 }
 
+class ForAll {
+    constructor(
+        public tvars: TypeVariable[],
+        public type: TyVar,
+    ) {}
+}
+
 export const intType = new TypeOperator(TypeName.NUMBER)
 export const strType = new TypeOperator(TypeName.STRING)
 export const boolType = new TypeOperator(TypeName.BOOLEAN)
@@ -33,16 +44,33 @@ export const neverType = new TypeOperator(TypeName.NEVER)
 export const FunctionType =
     (argType: TyVar, retType: TyVar) => new TypeOperator('->', [argType, retType])
 
+export class TypeEnv {
+    constructor(
+        public tc: HindleyMilner,
+        public map: Record<string, TyVar> = { },
+    ) { }
+    get(name: string, nonGenerics: Set<TyVar>) {
+        if (name in this.map)
+            return this.tc.fresh(this.map[name], nonGenerics)
+        throw 'undefined symbol: ' + name
+    }
+    extend(name: string, val: TyVar) {
+        Object.assign(this.map, { [name]: val })
+        // return new TypeEnv(this.tc, Object.assign({}, this.map, { [name]: val }))
+    }
+    copy() {
+        return new TypeEnv(this.tc, Object.assign({}, this.map))
+    }
+}
+
 export class HindleyMilner implements TypeChecker {
     constructor(
         public reader: Reader,
-        public globals: BuiltinTypes,
     ) {}
 
     public errors: TypeCheckError[] = []
 
-    typecheck(ast: Ast.Program, env: Env = {}) {
-        Object.assign(env, this.globals)
+    typecheck(ast: Ast.Program, env: TypeEnv) {
         let types: string[] = []
         for (let expr of ast) {
             if (expr == null)
@@ -52,10 +80,10 @@ export class HindleyMilner implements TypeChecker {
         return types
     }
 
-    tryExpr(term: Ast.AstNode, env: Env) {
+    tryExpr(term: Ast.AstNode, env: TypeEnv) {
         try {
             let t = this.analyze(term, env)
-            return this.typeToString(t, getToken(term))
+            return this.typeToString(t)
         } catch (err) {
             if (err instanceof TypeCheckError) {
                 this.errors.push(err)
@@ -65,57 +93,75 @@ export class HindleyMilner implements TypeChecker {
         }
     }
 
-    analyze(term: Ast.AstNode, env: Env): TyVar {
-        let analyzeRec = (term: Ast.AstNode, env: Env, nonGeneric: unknown): TyVar => {
+    analyze(term: Ast.AstNode, env: TypeEnv): TyVar {
+        let analyzeRec = (term: Ast.AstNode, env: TypeEnv, nonGenerics: Set<TyVar>): TyVar => {
             if (term.kind === 'VariableExpr') {
-                const type = this.getType(term.name, env, nonGeneric, getToken(term))
+                const type = this.getType(term.name, env, nonGenerics, getToken(term))
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'ExpressionStmt') {
-                const type = analyzeRec(term.expr, env, nonGeneric)
+                const type = analyzeRec(term.expr, env, nonGenerics)
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'GroupingExpr') {
-                const type = analyzeRec(term.expr, env, nonGeneric)
+                const type = analyzeRec(term.expr, env, nonGenerics)
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'BinaryExpr') {
-                let left = analyzeRec(term.left, env, nonGeneric)
-                let right = analyzeRec(term.right, env, nonGeneric)
+                let left = analyzeRec(term.left, env, nonGenerics)
+                let right = analyzeRec(term.right, env, nonGenerics)
                 this.unify(left, right, term)
                 Object.assign(term, { type: left })
                 return left
             }
             if (term.kind === 'AssignExpr') {
-                let type = this.getType(term.name.value, env, nonGeneric, getToken(term))
-                let body = analyzeRec(term.value, env, nonGeneric)
+                let type = this.getType(term.name.value, env, nonGenerics, getToken(term))
+                let body = analyzeRec(term.value, env, nonGenerics)
                 this.unify(type, body, term)
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'LetDeclaration') {
-                let type = analyzeRec(term.init, env, nonGeneric)
-                env[term.name.value] = type
+                let type = analyzeRec(term.init, env, nonGenerics)
+                env.extend(term.name.value, type)
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'LiteralExpr') {
-                const type = this.getLiteralType(term, env, nonGeneric)
+                const type = this.getLiteralType(term, env, nonGenerics)
                 return Object.assign(term, { type }).type
             }
+            if (term.kind === 'FuncDeclaration') {
+                const newEnv = env.copy()
+                const newNonGenerics = new Set(nonGenerics.keys())
+                term.params.forEach(t => {
+                    const argType = this.mkVariable();
+                    newEnv.extend(t.value, argType)
+                    newNonGenerics.add(argType)
+                })
+                const resultType = analyzeRec(term.body, newEnv, newNonGenerics)
+                const argType = newEnv.get(term.params[0].value, nonGenerics)
+                const funcType = FunctionType(argType, resultType)
+                env.extend(term.name.value, funcType)
+                return Object.assign(term, { type: funcType }).type
+            }
             if (term.kind === 'CallExpr') {
-                let funcType = analyzeRec(term.callee, env, nonGeneric)
+                let funcType = analyzeRec(term.callee, env, nonGenerics)
                 let [firstArg, ...restArgs] = term.args;
-                let argType = analyzeRec(firstArg, env, nonGeneric);
+                let argType = analyzeRec(firstArg, env, nonGenerics);
                 let retType = this.mkVariable();
                 this.unify(FunctionType(argType, retType), funcType, term);
                 Object.assign(term, { type: funcType }).type;
                 return retType;
             }
+            if (term.kind === 'BlockStmt') {
+                const type = term.stmts
+                    .map(stmt => analyzeRec(stmt, env, nonGenerics))
+                    .pop()!
+                return Object.assign(term, { type }).type
+            }
 
-            UNREACHABLE(term)
-
-            throw new Error('unreachable: analyze -> ' + (<any>term).kind)
+            return UNREACHABLE(term, new Error('unreachable: analyze -> ' + (<any>term).kind))
         }
-        return analyzeRec(term, env, void 0)
+        return analyzeRec(term, env, new Set())
     }
 
     unify(t1: TyVar, t2: TyVar, term: Ast.Expression | Ast.Statement): void {
@@ -124,7 +170,7 @@ export class HindleyMilner implements TypeChecker {
         if (pt1 instanceof TypeVariable) {
             if (pt1 !== pt2) {
                 if (this.occursInType(pt1, pt2)) {
-                    throw new TypeCheckError('recursive unification', getToken(term))
+                    throw this.error('recursive unification', getToken(term))
                 }
                 pt1.instance = <TypeVariable>pt2
             }
@@ -137,22 +183,24 @@ export class HindleyMilner implements TypeChecker {
                 const { start } = lineInfo(term);
                 const msg = 'Type mismatch: {0} != {1}; Ln {2}, Col {3}';
                 const args = [pt1.name, pt2.name, start.line, start.col];
-                throw new TypeCheckError(format(msg, ...args), getToken(term))
+                throw this.error(format(msg, ...args), getToken(term))
             }
             zip(pt1.types, pt2.types).forEach(([t1, t2]) => this.unify(t1, t2, term))
         }
     }
 
-    occursInType(v: TypeVariable, t2: TyVar): boolean {
-        const occursIn = (t: TypeVariable, types: TyVar[]) =>
-            types.some(t2 => this.occursInType(t, t2))
-
-        const pt2 = this.prune(t2)
-
-        return (pt2 instanceof TypeOperator) && occursIn(v, pt2.types)
+    occursInTypes(type: TypeVariable, types: TyVar[]) {
+        return types.some(t => this.occursInType(type, t))
     }
 
-    getLiteralType(term: Ast.LiteralExpr, env: Env, nonGeneric: unknown): TyVar {
+    occursInType(type: TypeVariable, typeIn: TyVar): boolean {
+        typeIn = this.prune(typeIn)
+        if (typeIn === type)
+            return true
+        return (typeIn instanceof TypeOperator) && this.occursInTypes(type, typeIn.types)
+    }
+
+    getLiteralType(term: Ast.LiteralExpr, env: TypeEnv, nonGenerics: Set<TyVar>): TyVar {
         switch (typeof term.value) {
             case 'string':   return strType;
             case 'number':   return intType;
@@ -163,58 +211,55 @@ export class HindleyMilner implements TypeChecker {
         }
     }
 
-    getType(name: string, env: Env, nonGeneric: unknown, token: Token): TyVar {
-        const fromEnv = env[name]
+    getType(name: string, env: TypeEnv, nonGenerics: Set<TyVar>, token: Token): TyVar {
+        const fromEnv = env.get(name, nonGenerics)
         if (fromEnv != undefined)
-            return this.fresh(fromEnv, nonGeneric)
-        throw new TypeCheckError(`Undefined symbol ${name}`, token)
+            return this.fresh(fromEnv, nonGenerics)
+        throw this.error(`Undefined symbol ${name}`, token)
     }
 
-    fresh(type: TyVar, nonGeneric: unknown): TyVar {
-        const table = new Map<TyVar, TyVar>()
-        const freshRec = (tp: TyVar): TyVar => {
-            const p = this.prune(tp)
-            if (p instanceof TypeVariable) {
-                if (this.isGeneric(p, nonGeneric)) {
-                    if (!table.has(p)) {
-                        let newVar = this.mkVariable()
-                        table.set(p, newVar)
-                        return newVar
-                    }
-                    return table.get(p)!
+    fresh(type: TyVar, nonGeneric: Set<TyVar>): TyVar {
+        const table = new WeakMap<TyVar, TyVar>()
+
+        const freshRec = (type: TyVar): TyVar => {
+            type = this.prune(type)
+            if (type instanceof TypeVariable) {
+                if (this.isGeneric(type, nonGeneric)) {
+                    if (!table.has(type))
+                        table.set(type, this.mkVariable())
+                    return table.get(type)!
                 }
-                return p
+                return type
             }
-            if (p instanceof TypeOperator) {
-                return new TypeOperator(
-                    p.name,
-                    p.types.map(t => freshRec(t))
-                )
+
+            if (type instanceof TypeOperator) {
+                return new TypeOperator(type.name, type.types.map(freshRec))
             }
-            throw new Error(`Unreachable 'fresh'`)
+
+            return UNREACHABLE(type, new Error(`Unreachable in 'fresh'`))
         }
+
         return freshRec(type)
     }
 
-    isGeneric(t: TyVar, nonGeneric: unknown): boolean {
-        throw new Error("Method not implemented: isGeneric.")
+    isGeneric(type: TypeVariable, nonGenerics: Set<TyVar>): boolean {
+        // throw new Error("Method not implemented: isGeneric.")
+        return !this.occursInTypes(type, Array.from(nonGenerics));
     }
 
     prune(tp: TyVar): TyVar {
-        if (tp instanceof TypeVariable) {
-            if (tp.instance instanceof TypeVariable) {
-                let newInstance = this.prune(tp.instance)
-                tp.instance = <TypeVariable>newInstance
-                return newInstance
-            }
+        if (tp instanceof TypeVariable && tp.instance) {
+            let newInstance = this.prune(tp.instance)
+            tp.instance = <TypeVariable>newInstance
+            return newInstance
         }
         return tp
     }
 
-    typeToString(t: TyVar, token: Token): string {
+    typeToString(t: TyVar): string {
         if (t instanceof TypeVariable) {
             if (t.instance instanceof TypeVariable) {
-                return this.typeToString(t.instance, token)
+                return this.typeToString(t.instance)
             }
             return this.variableName(t)
         }
@@ -223,15 +268,19 @@ export class HindleyMilner implements TypeChecker {
             if (length === 0)
                 return t.name
             if (length === 2) {
-                return format('({0} {1} {2})',
-                    this.typeToString(t.types[0], token),
+                return format('{0} {1} {2}',
+                    this.typeToString(t.types[0]),
                     t.name,
-                    this.typeToString(t.types[1], token),
+                    this.typeToString(t.types[1]),
                 )
             }
-            return t.types.map(t => this.typeToString(t, token)).join(' ')
+            const typenames = t.types
+                .map(t => this.typeToString(t))
+
+            return `${t.name} ${typenames.join(' ')}`
         }
-        throw new TypeCheckError('Unreachable typeToString: ' + t, token)
+
+        return UNREACHABLE(t, this.error('Unreachable typeToString: ' + t))
     }
 
     variableName(t: TypeVariable): string {
@@ -239,6 +288,10 @@ export class HindleyMilner implements TypeChecker {
         t.name = this._next_unique_name;
         this._next_unique_name = this.mkVariableName()
         return t.name
+    }
+
+    private error(msg: string, token?: Token) {
+        return new TypeCheckError(msg, token)
     }
 
     private _next_variable_id = 0
@@ -253,6 +306,6 @@ export class HindleyMilner implements TypeChecker {
 
 export type BuiltinTypes = typeof GlobalTypes;
 
-export const GlobalTypes: Env = {
+export const GlobalTypes: Record<string, TyVar> = {
     print: FunctionType(strType, intType)
 }

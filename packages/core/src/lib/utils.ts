@@ -1,6 +1,6 @@
 import type { Range, TokenKind, TokenOf } from "../Lexer";
 
-export const UNREACHABLE = (n: never) => n
+export const UNREACHABLE = (n: never, e?: any) => { if (e) throw e; return n; }
 
 export function format(fmt: string, ...args: any) {
     if (!fmt.match(/^(?:(?:(?:[^{}]|(?:\{\{)|(?:\}\}))+)|(?:\{[0-9]+\}))+$/)) {

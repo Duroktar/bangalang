@@ -4,7 +4,7 @@ import { FileReader } from "./lib/FileReader"
 import { ConsoleLogger } from "./lib/ConsoleLogger"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
-import { GlobalTypes, HindleyMilner } from "./lib/HindleyMilner"
+import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
 import { ConsoleReporter } from "./lib/SysReporter"
 import { StdLib } from "./lib/RuntimeLibrary"
 
@@ -27,19 +27,20 @@ function main(args: string[]) {
 
     reporter.reportParserErrors(parser, onError)
 
-    const typeChecker = new HindleyMilner(reader, GlobalTypes)
-
-    const types = typeChecker.typecheck(ast)
+    const typeChecker = new HindleyMilner(reader)
+    
+    const typeEnv = new TypeEnv(typeChecker, GlobalTypes)
+    const types = typeChecker.typecheck(ast, typeEnv)
 
     reporter.reportTypeErrors(typeChecker, onError)
 
-    const interpreter = new AstInterpreter(reader, StdLib)
-    const result = interpreter.execute(ast)
+    // const interpreter = new AstInterpreter(reader, StdLib)
+    // const result = interpreter.execute(ast)
 
     if (debugMode)
-        reporter.printFullReport(tokens, ast, types, result)
+        reporter.printFullReport(tokens, ast, types, /* result */)
 
-    output.log(result.slice(-1).pop())
+    // output.log(result.slice(-1).pop())
 
     return process.exit(0)
 
@@ -55,4 +56,6 @@ function main(args: string[]) {
 // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/another-test-file.bl'])
 // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/simple-test.bl'])
 // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test.bl'])
-main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-2.bl'])
+// main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-2.bl'])
+// main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-3.bl'])
+main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/func-test.bl'])
