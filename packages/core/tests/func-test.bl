@@ -3,4 +3,4 @@ func sayhi(a) {
     print(a);
 }
 
-sayhi(8);
+sayhi(8000);

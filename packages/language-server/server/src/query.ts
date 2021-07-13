@@ -1,4 +1,4 @@
-import { AssignExpr, AstNode, BinaryExpr, BlockStmt, CallExpr, Expression, ExpressionStmt, FuncDeclaration, GroupingExpr, LetDeclaration, LiteralExpr, Program, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
+import { AssignExpr, AstNode, BinaryExpr, BlockStmt, CallExpr, Expression, ExpressionStmt, FuncDeclaration, GroupingExpr, LetDeclaration, LiteralExpr, Program, ReturnStmt, Statement, Token, TokenKind, Typed, VariableExpr, Visitor } from '@bangalang/core';
 
 type QueryData = Program | Statement | Expression;
 
@@ -82,6 +82,12 @@ class QueryVisitor implements Visitor {
         }
         return null;
     }
+    visitReturnStmt(node: ReturnStmt): any{
+        if (node.keyword === this.target) {
+            return node;
+        }
+        return node.value.accept(this);
+    }
 }
 
 class QuerySelectorAllVisitor implements Visitor {
@@ -103,17 +109,17 @@ class QuerySelectorAllVisitor implements Visitor {
     visitExpressionStmt(node: ExpressionStmt): any {
         if (this._selectors.includes(node.token.kind))
             this._selected.push(node);
-        node.expr?.accept(this);
+        node.expr.accept(this);
     }
     visitLetDeclaration(node: LetDeclaration): any {
         if (this._selectors.includes(node.token.kind))
             this._selected.push(node);
-        node.init?.accept(this);
+        node.init.accept(this);
     }
     visitGroupingExpr(node: GroupingExpr): any {
         if (this._selectors.includes(node.token.kind))
             this._selected.push(node);
-        node.expr?.accept(this);
+        node.expr.accept(this);
     }
     visitLiteralExpr(node: LiteralExpr): any {
         if (this._selectors.includes(node.token.kind))
@@ -126,21 +132,25 @@ class QuerySelectorAllVisitor implements Visitor {
     visitAssignExpr(node: AssignExpr): any {
         if (this._selectors.includes(node.name.kind))
             this._selected.push(node);
-        node.value?.accept(this);
+        node.value.accept(this);
     }
     visitBinaryExpr(node: BinaryExpr): any {
         if (this._selectors.includes(node.op.kind))
             this._selected.push(node);
-        node.left?.accept(this);
-        node.right?.accept(this);
+        node.left.accept(this);
+        node.right.accept(this);
     }
-
+    visitReturnStmt(node: ReturnStmt): any {
+        if (this._selectors.includes(node.keyword.kind))
+            this._selected.push(node);
+        node.value.accept(this);
+    }
     visitCallExpr(node: CallExpr): any{
         if (this._selectors.includes(node.paren.kind)) {
             this._selected.push(node);
         }
         node.args.forEach(arg =>arg.accept(this));
-        node.callee?.accept(this);
+        node.callee.accept(this);
     }
     visitFuncDeclaration(node: FuncDeclaration): any {
         if (this._selectors.includes(node.name.kind)) {

@@ -9,69 +9,6 @@ export class LexerError {
     ) { }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export enum TokenKind {
     // literals
     STRING = 'string',
@@ -228,6 +165,10 @@ export function getToken(expr: Ast.AstNode): Token {
 
     if (expr instanceof Ast.FuncDeclaration) {
         return expr.name
+    }
+
+    if (expr instanceof Ast.ReturnStmt) {
+        return expr.keyword
     }
 
     if (expr instanceof Ast.BlockStmt) {

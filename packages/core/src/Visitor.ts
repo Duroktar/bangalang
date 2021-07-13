@@ -2,6 +2,7 @@ import type * as Ast from "./Ast";
 import { Printable } from "./Logger";
 
 export interface Visitor {
+    visitReturnStmt(node: Ast.ReturnStmt): any;
     visitExpressionStmt(node: Ast.ExpressionStmt): any
     visitFuncDeclaration(node: Ast.FuncDeclaration): any;
     visitLetDeclaration(node: Ast.LetDeclaration): any

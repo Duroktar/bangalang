@@ -16,6 +16,10 @@ export class AstTypeChecker implements TypeChecker {
         throw new Error("Method not implemented.");
     };
 
+    visitReturnStmt(node: Ast.ReturnStmt) {
+        throw new Error("Method not implemented.");
+    };
+
     visitBlockStmt(node: Ast.BlockStmt) {
         throw new Error("Method not implemented.");
     };
@@ -115,6 +119,7 @@ export class AstTypeChecker implements TypeChecker {
             expr instanceof Ast.GroupingExpr   ||
             expr instanceof Ast.LetDeclaration ||
             expr instanceof Ast.FuncDeclaration||
+            expr instanceof Ast.ReturnStmt     ||
             expr instanceof Ast.ExpressionStmt
         ) {
             return (<WithType<typeof expr>>expr).type

@@ -16,6 +16,7 @@ export type Declaration =
 
 export type Statement =
     | ExpressionStmt
+    | ReturnStmt
     | BlockStmt
     | Expression
 
@@ -174,6 +175,20 @@ export class BlockStmt implements Visitable {
     };
 
     toString(): string { return `{\n${this.stmts.map(o => o.toString())}\n}` }
+}
+
+export class ReturnStmt implements Visitable {
+    public kind = 'ReturnStmt' as const
+    constructor(
+        public keyword: TokenOf<TokenKind.RETURN>,
+        public value: Expression,
+    ) { }
+
+    accept = (visitor: Visitor) => {
+        return visitor.visitReturnStmt(this);
+    };
+
+    toString(): string { return 'return' }
 }
 
 export function kindName(kind: Expression['kind']): string {

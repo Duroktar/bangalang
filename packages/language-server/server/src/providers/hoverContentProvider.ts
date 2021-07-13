@@ -1,4 +1,5 @@
 import { HoverParams } from 'vscode-languageserver/node';
+import { HindleyMilner, Statement, Typed, TypeOperator } from '@bangalang/core';
 import { findNodeForToken } from "../query";
 import { SourceDiagnostics } from "../types";
 
@@ -25,8 +26,27 @@ export function hoverContentProvider(params: HoverParams, sourceData: SourceDiag
 		: null;
 
 	const msgContent = (token && node && node.type)
-		? `${node.toString()}: ${tc.typeToString(node.type)}`
-		: reader.getLineOfSource(token!.lineInfo);
+		? formatNodeTypeString(node, tc)
+		: token?.lineInfo ? reader.getLineOfSource(token.lineInfo) : '';
 
 	return [msgContent];
+}
+
+function formatNodeTypeString(node: Typed<Statement>, tc: HindleyMilner) {
+	switch (node.type.name) {
+		case '=>': {
+			const funcName = node.toString();
+
+			const args = (<TypeOperator>node.type).types
+				.slice(0, 1)
+				.map(o => o.label ? `${o.label}: ${tc.typeToString(o)}` : tc.typeToString(o))
+				.join(', ');
+
+			const returnTypeName = tc.typeToString((<TypeOperator>node.type).types[1]);
+
+			return `func ${funcName}(${args}): ${returnTypeName}`;
+		}
+		default:
+			return `${node.toString()}: ${tc.typeToString(node.type)}`;
+	}
 }

@@ -29,6 +29,11 @@ export class TokenLexer implements Lexer<Token[]> {
                 case '\t':
                     this.advance()
                     break;
+                case '/':
+                    if (this.peekAhead() === '/') {
+                        this.comment();
+                        break
+                    }
                 default: {
                     if (current.match(/\d/)) {
                         this.parseInt()
@@ -46,6 +51,11 @@ export class TokenLexer implements Lexer<Token[]> {
         this.tokens.push({ kind: _.EOF, lineInfo })
 
         return this.tokens;
+    }
+
+    comment() {
+        while (!this.atEOF() && !this.peek().match(/[\n\r]/))
+            this.advance()
     }
 
     private addToken<T extends Exclude<Token, { value: any }>>(kind: T['kind']) {

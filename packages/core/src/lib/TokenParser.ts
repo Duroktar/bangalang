@@ -71,11 +71,20 @@ export class TokenParser implements Parser<Token[], object[]> {
     }
 
     statement(): Statement {
-        if (this.match(TokenKind.LEFT_BRACE)) {
+        if (this.match(TokenKind.RETURN))
+            return this.returnStatement();
+
+        if (this.match(TokenKind.LEFT_BRACE))
             return new BlockStmt(this.block());
-        }
 
         return this.exprStmt()
+    }
+
+    returnStatement(): Ast.ReturnStmt {
+        const keyword = this.previous<TokenKind.RETURN>();
+        const value = this.expression();
+        this.consume(TokenKind.SEMI, "Expect ';' after return value.");
+        return new Ast.ReturnStmt(keyword, value);
     }
 
     block() {

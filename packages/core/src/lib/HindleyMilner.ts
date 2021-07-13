@@ -1,5 +1,5 @@
 import type * as Ast from '../Ast';
-import { FuncDeclaration } from '../Ast';
+import { kindName } from '../Ast';
 import { getToken, lineInfo, Token } from '../Lexer';
 import { Reader } from '../Reader';
 import { TypeChecker, TypeCheckError, TypeName } from '../Types';
@@ -14,18 +14,20 @@ export type TyVar =
 export type Scheme =
     | ForAll
 
-class TypeVariable {
+export class TypeVariable {
     constructor(
         public readonly id: number,
         public instance?: TypeVariable,
         public name?: string,
+        public label?: string,
     ) {}
 }
 
-class TypeOperator {
+export class TypeOperator {
     constructor(
         public readonly name: string,
         public readonly types: TyVar[] = [],
+        public label?: string,
     ) {}
 }
 
@@ -42,16 +44,16 @@ export const boolType = new TypeOperator(TypeName.BOOLEAN)
 export const anyType = new TypeOperator(TypeName.ANY)
 export const neverType = new TypeOperator(TypeName.NEVER)
 export const FunctionType =
-    (argType: TyVar, retType: TyVar) => new TypeOperator('->', [argType, retType])
+    (argType: TyVar, retType: TyVar) => new TypeOperator('=>', [argType, retType])
 
 export class TypeEnv {
     constructor(
         public tc: HindleyMilner,
         public map: Record<string, TyVar> = { },
     ) { }
-    get(name: string, nonGenerics: Set<TyVar>) {
+    get(name: string, nonGenerics: Set<TyVar>, label = true) {
         if (name in this.map)
-            return this.tc.fresh(this.map[name], nonGenerics)
+            return this.tc.fresh(this.map[name], nonGenerics, label)
         throw 'undefined symbol: ' + name
     }
     extend(name: string, val: TyVar) {
@@ -134,6 +136,7 @@ export class HindleyMilner implements TypeChecker {
                 const newNonGenerics = new Set(nonGenerics.keys())
                 term.params.forEach(t => {
                     const argType = this.mkVariable();
+                    argType.label = t.value
                     newEnv.extend(t.value, argType)
                     newNonGenerics.add(argType)
                 })
@@ -144,13 +147,16 @@ export class HindleyMilner implements TypeChecker {
                 return Object.assign(term, { type: funcType }).type
             }
             if (term.kind === 'CallExpr') {
-                let funcType = analyzeRec(term.callee, env, nonGenerics)
-                let [firstArg, ...restArgs] = term.args;
-                let argType = analyzeRec(firstArg, env, nonGenerics);
+                let funcType = analyzeRec(term.callee, env, nonGenerics);
+                let argType = analyzeRec(term.args[0], env, nonGenerics);
                 let retType = this.mkVariable();
                 this.unify(FunctionType(argType, retType), funcType, term);
                 Object.assign(term, { type: funcType }).type;
                 return retType;
+            }
+            if (term.kind === 'ReturnStmt') {
+                const type = analyzeRec(term.value, env, nonGenerics)
+                return Object.assign(term, { type }).type
             }
             if (term.kind === 'BlockStmt') {
                 const type = term.stmts
@@ -180,12 +186,31 @@ export class HindleyMilner implements TypeChecker {
         }
         else if (pt1 instanceof TypeOperator && pt2 instanceof TypeOperator) {
             if (pt1.name !== pt2.name || pt1.types.length !== pt2.types.length) {
-                const { start } = lineInfo(term);
+                this.handleTypeOperatorsUnificationError(pt1, pt2, term)
+            }
+            zip(pt1.types, pt2.types).forEach(([t1, t2]) => this.unify(t1, t2, term))
+        }
+    }
+
+    handleTypeOperatorsUnificationError(
+        pt1: TypeOperator,
+        pt2: TypeOperator,
+        term: Ast.Expression | Ast.Statement,
+    ) {
+        const { start } = lineInfo(term);
+        switch(term.kind) {
+            case 'CallExpr': {
+                const msg = "Can't assign argument of type '{0}' to parameter '{4}' of type '{1}' in function '{5}'; Ln {2}, Col {3}";
+                const args = [pt1.name, pt2.name, start.line, start.col, pt2.label ?? this.typeToString(pt2), term.callee.toString()];
+                throw this.error(format(msg, ...args), getToken(term.args[0]))
+            }
+            case 'BinaryExpr':
+            case 'AssignExpr':
+            default: {
                 const msg = 'Type mismatch: {0} != {1}; Ln {2}, Col {3}';
                 const args = [pt1.name, pt2.name, start.line, start.col];
                 throw this.error(format(msg, ...args), getToken(term))
             }
-            zip(pt1.types, pt2.types).forEach(([t1, t2]) => this.unify(t1, t2, term))
         }
     }
 
@@ -218,7 +243,7 @@ export class HindleyMilner implements TypeChecker {
         throw this.error(`Undefined symbol ${name}`, token)
     }
 
-    fresh(type: TyVar, nonGeneric: Set<TyVar>): TyVar {
+    fresh(type: TyVar, nonGeneric: Set<TyVar>, label = true): TyVar {
         const table = new WeakMap<TyVar, TyVar>()
 
         const freshRec = (type: TyVar): TyVar => {
@@ -233,7 +258,8 @@ export class HindleyMilner implements TypeChecker {
             }
 
             if (type instanceof TypeOperator) {
-                return new TypeOperator(type.name, type.types.map(freshRec))
+                // return new TypeOperator(type.name, type.types.map(freshRec))
+                return new TypeOperator(type.name, type.types.map(freshRec), label ? type.label : undefined)
             }
 
             return UNREACHABLE(type, new Error(`Unreachable in 'fresh'`))
@@ -251,6 +277,7 @@ export class HindleyMilner implements TypeChecker {
         if (tp instanceof TypeVariable && tp.instance) {
             let newInstance = this.prune(tp.instance)
             tp.instance = <TypeVariable>newInstance
+            newInstance.label = tp.label
             return newInstance
         }
         return tp
@@ -309,3 +336,50 @@ export type BuiltinTypes = typeof GlobalTypes;
 export const GlobalTypes: Record<string, TyVar> = {
     print: FunctionType(strType, intType)
 }
+
+// function tokenToString(expr: Token) {
+//     if (expr instanceof Ast.LiteralExpr) {
+//         return expr.token
+//     }
+
+//     if (expr instanceof Ast.BinaryExpr) {
+//         return newWithLineInfo(expr.op, {
+//             start: getToken(expr.left).lineInfo.start,
+//             end: getToken(expr.right).lineInfo.end,
+//         })
+//     }
+
+//     if (expr instanceof Ast.VariableExpr) {
+//         return expr.token
+//     }
+
+//     if (expr instanceof Ast.AssignExpr) {
+//         return expr.name
+//     }
+
+//     if (expr instanceof Ast.GroupingExpr) {
+//         return expr.token
+//     }
+
+//     if (expr instanceof Ast.LetDeclaration) {
+//         return expr.name
+//     }
+
+//     if (expr instanceof Ast.ExpressionStmt) {
+//         return expr.token
+//     }
+
+//     if (expr instanceof Ast.CallExpr) {
+//         return expr.paren
+//     }
+
+//     if (expr instanceof Ast.FuncDeclaration) {
+//         return expr.name
+//     }
+
+//     if (expr instanceof Ast.BlockStmt) {
+//         return getToken(expr.stmts[0])
+//     }
+
+//     throw new Error('No token found for: ' + UNREACHABLE(expr))
+// }    
