@@ -1,7 +1,7 @@
 import type { LiteralToken, OperatorToken, Token, TokenOf, VariableToken } from "./Lexer";
 import { TokenKind } from "./Lexer";
-import type { Visitable, Visitor } from "./Visitor";
 import { UNREACHABLE } from "./lib/utils";
+import type { Visitable, Visitor } from "./Visitor";
 
 export type Program =
     | AstNode[]
@@ -41,7 +41,14 @@ export class FuncDeclaration implements Visitable {
         return visitor.visitFuncDeclaration(this);
     };
 
-    toString(): string { return this.name.value }
+    toString(): string {
+        const name = this.name.value;
+        const params = this.params
+            .map(o => o.value)
+            .join(', ');
+        const body = this.body.toString();
+        return `func ${name}(${params}) ${body}`;
+    }
 }
 
 export class LetDeclaration implements Visitable {
@@ -56,7 +63,11 @@ export class LetDeclaration implements Visitable {
         return visitor.visitLetDeclaration(this);
     };
 
-    toString(): string { return this.name.value }
+    toString(): string {
+        const name = this.name.value;
+        const init = this.init.toString();
+        return `let ${name} = ${init}`
+    }
 }
 
 export class ExpressionStmt implements Visitable {
@@ -70,7 +81,9 @@ export class ExpressionStmt implements Visitable {
         return visitor.visitExpressionStmt(this);
     };
 
-    toString(): string { return this.expr.toString() }
+    toString(): string {
+        return this.expr.toString()
+    }
 }
 
 export class AssignExpr implements Visitable {
@@ -84,7 +97,11 @@ export class AssignExpr implements Visitable {
         return visitor.visitAssignExpr(this);
     };
 
-    toString(): string { return this.name.value }
+    toString(): string {
+        const name = this.name.value;
+        const value = this.value.toString();
+        return `${name} = ${value}`
+    }
 }
 
 export class BinaryExpr implements Visitable {
@@ -99,7 +116,12 @@ export class BinaryExpr implements Visitable {
         return visitor.visitBinaryExpr(this);
     };
 
-    toString(): string { return opKindToString(this.op.kind) }
+    toString(): string {
+        const op = opKindToString(this.op.kind);
+        const left = this.left.toString();
+        const right = this.right.toString();
+        return `${left} ${op} ${right}`
+    }
 }
 
 export class CallExpr implements Visitable {
@@ -133,7 +155,7 @@ export class LiteralExpr implements Visitable {
         return visitor.visitLiteralExpr(this);
     };
 
-    toString(): string { return this.value + '' }
+    toString(): string { return String(this.value) }
 }
 
 export class VariableExpr implements Visitable {
@@ -161,7 +183,9 @@ export class GroupingExpr implements Visitable {
         return visitor.visitGroupingExpr(this);
     };
 
-    toString(): string { return `( ${this.expr.toString()} )` }
+    toString(): string {
+        return `(${this.expr.toString()})`
+    }
 }
 
 export class BlockStmt implements Visitable {
@@ -174,7 +198,12 @@ export class BlockStmt implements Visitable {
         return visitor.visitBlockStmt(this);
     };
 
-    toString(): string { return `{\n${this.stmts.map(o => o.toString())}\n}` }
+    toString(): string {
+        const stmts = this.stmts
+            .map(o => '  ' + o)
+            .join('\n');
+        return `{\n${stmts}\n}`
+    }
 }
 
 export class ReturnStmt implements Visitable {
@@ -188,7 +217,9 @@ export class ReturnStmt implements Visitable {
         return visitor.visitReturnStmt(this);
     };
 
-    toString(): string { return 'return' }
+    toString(): string {
+        return `return ${this.value.toString()}`
+    }
 }
 
 export function kindName(kind: Expression['kind']): string {

@@ -185,6 +185,7 @@ const keywordTypeMap = {
     'false': _.FALSE,
     'let': _.LET,
     'func': _.FUNC,
+    'return': _.RETURN,
 } as ObjOf<KeywordType>;
 
 function getKeywordType(op: string) {
