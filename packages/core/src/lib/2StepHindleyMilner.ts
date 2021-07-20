@@ -290,8 +290,7 @@ let generalize: (env: TypeEnv, t: Type) => Scheme
 
 let infer: (env: TypeEnv, e: Expr) => [Subst, Type]
     = (env, ex) => {
-        if (ex instanceof Var)
-            return lookupEnv(env, ex)
+        if (ex instanceof Var) return lookupEnv(env, ex)
 
         if (ex instanceof Lam) {
             let tv = fresh()
@@ -352,20 +351,20 @@ let infer: (env: TypeEnv, e: Expr) => [Subst, Type]
         throw error('unreachable infer: ' + JSON.stringify(ex))
     }
 
-let ops: Record<Binop, Type>
-    = {
-        [Binop.Add]: new TArr(typeInt, new TArr(typeInt, typeInt)),
-        [Binop.Mul]: new TArr(typeInt, new TArr(typeInt, typeInt)),
-        [Binop.Sub]: new TArr(typeInt, new TArr(typeInt, typeInt)),
-        [Binop.Eql]: new TArr(typeInt, new TArr(typeInt, typeBool)),
-    }
-
 let lookupEnv: (env: TypeEnv, v: Var) => [Subst, Type]
     = (env, x) => {
         const rv = env.get(x.name)
         if (rv == null)
             throw error(`unbound variable: '${x}'`)
         return [nullSubst, instantiate(rv)]
+    }
+
+let ops: Record<Binop, Type>
+    = {
+        [Binop.Add]: new TArr(typeInt, new TArr(typeInt, typeInt)),
+        [Binop.Mul]: new TArr(typeInt, new TArr(typeInt, typeInt)),
+        [Binop.Sub]: new TArr(typeInt, new TArr(typeInt, typeInt)),
+        [Binop.Eql]: new TArr(typeInt, new TArr(typeInt, typeBool)),
     }
 
 let ppr: (t: Type | Scheme | Expr) => string
