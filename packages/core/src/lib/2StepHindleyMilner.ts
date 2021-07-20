@@ -12,6 +12,15 @@ class UnificationFail {
     public message = "Unification Failure"
 }
 
+class UnificationMismatch {
+    constructor(
+        public type1: Type[],
+        public type2: Type[],
+    ) {}
+
+    public message = "Unification Mismatch"
+}
+
 class InfiniteType {
     constructor(
         public type: Type,
@@ -37,7 +46,10 @@ let setUnion: <V>(a: Set<V>, b: Set<V>) => Set<V>
     = (s1, s2) => new Set([...s1, ...s2])
 
 let setDifference: <T>(a: Set<T>, b: Set<T>) => Set<T>
-    = <T>(a: Set<T>, b: Set<T>) => new Set([...a].filter(x => !b.has(x)));
+    = (s1, s2) => new Set([...s1].filter(x => !s2.has(x)));
+
+let setMember: <T>(a: T, b: Set<T>) => boolean
+    = (s1, s2) => s2.has(s1)
 
 type TorArrayT<T> = T | T[]
 
@@ -183,13 +195,9 @@ let extend: (e: TypeEnv, t: [Var['name'], Scheme]) => TypeEnv
 
 type Subst = Map<TVar, Type>
 
-const nullSubst: Subst = new Map()
-
-let compose: (a: Subst, b: Subst) => Subst
-    = (s1, s2) => mapUnion(mapMap(v => apply(s1, v), s2), s1)
-
 type Substitutable = TorArrayT<
     | Type
+    | Constraint
     | Scheme
     | TypeEnv
 >;
@@ -214,6 +222,9 @@ let apply: <T extends Substitutable>(s: Subst, t: T) => T
             return new ForAll(t.as, apply(s1, t.t))
         }
 
+        if (t instanceof Constraint)
+            return new Constraint([apply(s, t.value[0]), apply(s, t.value[1])])
+
         if (t instanceof Map)
             return mapMap(t1 => apply(s, t1), env)
 
@@ -221,7 +232,7 @@ let apply: <T extends Substitutable>(s: Subst, t: T) => T
     }
 
 let ftv: (t: Substitutable) => Set<TVar>
-    = (t: Substitutable): Set<TVar> => {
+    = (t): Set<TVar> => {
         if (Array.isArray(t))
             return t.reduce((acc, val) => setUnion(acc, ftv(val)), new Set<TVar>())
         if (t instanceof Map)
@@ -234,46 +245,31 @@ let ftv: (t: Substitutable) => Set<TVar>
             return setUnion(ftv(t.left), ftv(t.right))
         if (t instanceof ForAll)
             return setDifference(ftv(t), ftv(t.as))
+        if (t instanceof Constraint)
+            return setUnion(ftv(t.value[0]), ftv(t.value[1]))
 
         throw new Error('unreachable ftv: ' + JSON.stringify(t))
+    }
+
+let inEnv: <T>(o: [Name, Scheme], i: Infer<T>) => Infer<T>
+    = (o, i) => {
+        let env1 = extend(i.env, [...o])
+        let i1 = new Infer(env1, i.state, i.inferState)
+        return i1
+    }
+
+let lookupEnv: (env: TypeEnv, v: Var) => Type
+    = (env, x) => {
+        const rv = env.get(x.name)
+        if (rv == null)
+            throw error(`unbound variable: '${x}'`)
+        return instantiate(rv);
     }
     
 let letters = (function() { let n = 1; let cb = () => `${String.fromCharCode((n++) + 97)}`; return { next: cb } })();
 
 let fresh: () => TVar
     = () => new TVar()
-
-let occursCheck: (v: TVar, t: Type) => boolean
-    = (a, t) => ftv(t).has(a)
-
-let unify: (t1: Type, t2: Type) => Subst
-    = (t1, t2) => {
-        if (t1 instanceof TVar)
-            return bind(t1, t2)
-        if (t2 instanceof TVar)
-            return unify(t2, t1)
-        if (t1 instanceof TCon && t2 instanceof TCon && t1 === t2)
-            return nullSubst
-        if (t1 instanceof TArr && t2 instanceof TArr) {
-            let s1 = unify(t1.left, t2.left)
-            let s2 = unify(apply(s1, t1.right), apply(s1, t2.right))
-            return compose(s1, s2)
-        }
-
-        throw new UnificationFail(t1, t2)
-    }
-
-let bind: (v: TVar, t: Type) => Subst
-    = (a, t) => {
-        if (a instanceof TVar) {
-            if (a !== t) {
-                if (occursCheck(a, t))
-                    throw new InfiniteType(a, t)
-                new Map([[a, t]])
-            }
-        }
-        return nullSubst
-    }
 
 let instantiate: (s: Scheme) => Type
     = ({ as, t }) => {
@@ -284,79 +280,8 @@ let instantiate: (s: Scheme) => Type
 
 let generalize: (env: TypeEnv, t: Type) => Scheme
     = (env, t) => {
-        let as = setDifference(ftv(t), ftv(env))
-        return new ForAll([...as], t)
-    }
-
-let infer: (env: TypeEnv, e: Expr) => [Subst, Type]
-    = (env, ex) => {
-        if (ex instanceof Var) return lookupEnv(env, ex)
-
-        if (ex instanceof Lam) {
-            let tv = fresh()
-            let sX = [new Var(ex.name), new ForAll([], tv)]
-            let env1 = extend(env, <[string, Scheme]>sX)
-            let [s1, t1] = infer(env1, ex.expr)
-            return [s1, apply(s1, new TArr(tv, t1))]
-        }
-    
-        if (ex instanceof App) {
-            let { fn: e1, arg: e2 } = ex
-            let tv = fresh()
-            let [s1, t1] = infer(env, e1)
-            let [s2, t2] = infer(apply(s1, env), e2)
-            let s3 = unify(apply(s2, t1), new TArr(t2, tv))
-            return [compose(compose(s3, s2), s1), apply(s3, tv)]
-        }
-    
-        if (ex instanceof Let) {
-            let { v: x, defn: e1, body: e2 } = ex
-            let [s1, t1] = infer(env, e1)
-            let env1 = apply(s1, env)
-            let tI = generalize(env1, t1)
-            let [s2, t2] = infer(extend(env1, [x, tI]), e2)
-            return [compose(s1, s2), t2]
-        }
-    
-        if (ex instanceof If) {
-            let { cmp: cond, succ: tr, fail: fl } = ex
-            let [s1, t1] = infer(env, cond)
-            let [s2, t2] = infer(env, tr)
-            let [s3, t3] = infer(env, fl)
-            let s4 = unify(t1, typeBool)
-            let s5 = unify(t2, t3)
-            return [compose(compose(compose(compose(s5, s4), s3), s2), s1), apply(s5, t2)]
-        }
-    
-        if (ex instanceof Fix) {
-            let { pnt: e1 } = ex
-            let [s1, t] = infer(env, e1)
-            let tv = fresh()
-            let s2 = unify(new TArr(tv, tv), t)
-            return [s2, apply(s1, tv)]
-        }
-    
-        if (ex instanceof Op) {
-            let { op, left: e1, right: e2 } = ex
-            let [s1, t1] = infer(env, e1)
-            let [s2, t2] = infer(env, e2)
-            let tv = fresh()
-            let s3 = unify(new TArr(t1, new TArr(t2, tv)), ops[op])
-            return [compose(compose(s3, s2), s1), apply(s3, tv)]
-        }
-    
-        if (ex instanceof LInt) return [nullSubst, typeInt]
-        if (ex instanceof LBool) return [nullSubst, typeBool]
-
-        throw error('unreachable infer: ' + JSON.stringify(ex))
-    }
-
-let lookupEnv: (env: TypeEnv, v: Var) => [Subst, Type]
-    = (env, x) => {
-        const rv = env.get(x.name)
-        if (rv == null)
-            throw error(`unbound variable: '${x}'`)
-        return [nullSubst, instantiate(rv)]
+        let as = [...setDifference(ftv(t), ftv(env))]
+        return new ForAll(as, t)
     }
 
 let ops: Record<Binop, Type>
@@ -365,6 +290,92 @@ let ops: Record<Binop, Type>
         [Binop.Mul]: new TArr(typeInt, new TArr(typeInt, typeInt)),
         [Binop.Sub]: new TArr(typeInt, new TArr(typeInt, typeInt)),
         [Binop.Eql]: new TArr(typeInt, new TArr(typeInt, typeBool)),
+    }
+
+type InferState = {
+    count: number;
+};
+
+class Infer<T> {
+    constructor(
+        public env: TypeEnv,
+        public stateT?: T,
+        public inferState: InferState = { count: 0 },
+    ) {}
+
+    get state() { return this.stateT! }
+}
+
+type StateT = [Type, Constraint[]];
+
+let ret = (i: Infer<StateT>, v: StateT): Infer<StateT> => {
+    return new Infer<StateT>(i.env, v, i.inferState)
+}
+
+let infer: (i: Infer<StateT>, e: Expr) => Infer<StateT>
+    = (i, ex) => {
+        if (ex instanceof LInt) return ret(i, [typeInt, []])
+        if (ex instanceof LBool) return ret(i, [typeBool, []])
+
+        if (ex instanceof Var)
+            return ret(i, [lookupEnv(i.env, ex), []])
+
+        if (ex instanceof Lam) {
+            let tv = fresh()
+            let x: [Name, Scheme] = [ex.name, new ForAll([], tv)]
+            let [t, c] = inEnv(x, infer(i, ex.expr)).state
+            return ret(i, [new TArr(tv, t), c])
+        }
+    
+        if (ex instanceof App) {
+            let { fn: e1, arg: e2 } = ex
+            let [t1, c1] = infer(i, e1).state
+            let [t2, c2] = infer(i, e2).state
+            let tv = fresh()
+            let c3 = new Constraint([t1, new TArr(t2, tv)])
+            return ret(i, [tv, c1.concat(c2, c3)])
+        }
+    
+        if (ex instanceof Let) {
+            let { v: x, defn: e1, body: e2 } = ex
+            let [t1, c1] = infer(i, e1).state
+            let sub = runSolve(c1)
+            let sc = generalize(apply(sub, env), apply(sub, t1))
+            apply(sub, infer(i, e2).env)
+            let [t2, c2] = inEnv([x, sc], i).state
+            return ret(i, [t2, c1.concat(c2)])
+        }
+        
+        if (ex instanceof Fix) {
+            let { pnt: e1 } = ex
+            let [t1, c1] = infer(i, e1).state
+            let tv = fresh()
+            let c2 = new Constraint([new TArr(tv, tv), t1])
+            return ret(i, [tv, c1.concat(c2)])
+        }
+    
+        if (ex instanceof Op) {
+            let { op, left: e1, right: e2 } = ex
+            let [t1, c1] = infer(i, e1).state
+            let [t2, c2] = infer(i, e2).state
+            let tv = fresh()
+            let u1 = new TArr(t1, new TArr(t2, tv))
+            let u2 = ops[op]
+            let c3 = new Constraint([u1, u2])
+            return ret(i, [tv, c1.concat(c2, c3)])
+        }
+    
+        if (ex instanceof If) {
+            let { cmp: cond, succ: tr, fail: fl } = ex
+            let [t1, c1] = infer(i, cond).state
+            let [t2, c2] = infer(i, tr).state
+            let [t3, c3] = infer(i, fl).state
+            let c4 = new Constraint([t1, typeBool])
+            let c5 = new Constraint([t2, t3])
+            return ret(i, [t2, c1.concat(c2, c3, c4, c5)])
+        }
+
+        throw error('unreachable infer: ' + JSON.stringify(ex))
     }
 
 let ppr: (t: Type | Scheme | Expr) => string
@@ -398,20 +409,125 @@ let ppr: (t: Type | Scheme | Expr) => string
 
 ///////////////////////////////////////////////////////////////////////////////
 
-export function tryExpr(expr: Expr, env: TypeEnv): [Subst, Type] {
+let runInfer: (e: TypeEnv, i: Infer<StateT>) => StateT
+    = (e, i) => {
+        return i.state
+    }
+
+let inferExpr: (i: Infer<StateT>, e: TypeEnv, ex: Expr) => Scheme
+    = (i, env, ex) => {
+        let [ty, cs] = runInfer(env, infer(i, ex))
+        let subst = runSolve(cs)
+        return closeOver(apply(subst, ty))
+    }
+
+let constraintsExpr: (i: Infer<StateT>, e: TypeEnv, ex: Expr) => [Constraint[], Subst, Type, Scheme]
+    = (i, env, ex) => {
+        let [ty, cs] = runInfer(env, infer(i, ex))
+        let subst = runSolve(cs)
+        const sc = closeOver(apply(subst, ty));
+        return [cs, subst, ty, sc]
+    }
+
+let closeOver: (t: Type) => Scheme
+    = (t) => normalize(generalize(new Map(), t))
+
+let inferTop: (i: Infer<StateT>, e: TypeEnv, o: [string, Expr][]) => TypeEnv
+    = (i, env, exprs) => {
+        if (exprs.length === 0)
+            return env
+        let [head, ...xs] = exprs
+        let [name, ex] = head
+        
+        let ty = inferExpr(i, env, ex)
+        return inferTop(i, extend(env, [name, ty]), xs)
+    }
+
+let normalize: (s: Scheme) => Scheme
+    = (s) => {
+        return s
+    }
+
+// -------------------------------------------------------------------------------
+// -- Constraint Solver
+// -------------------------------------------------------------------------------
+
+class Constraint {
+    constructor (public value: [Type, Type]) {}
+}
+
+type Unifier = [Subst, Constraint[]]
+   
+let emptySubst: () => Subst = () => new Map()
+
+let compose: (a: Subst, b: Subst) => Subst
+    = (s1, s2) => mapUnion(mapMap(v => apply(s1, v), s2), s1)
+
+let runSolve: (a: Constraint[]) => Subst
+    = (cs) => {
+        return solver([emptySubst(), cs])
+    }
+
+let unifyMany: (a: Type[], b: Type[]) => Subst
+    =  (a, b) => {
+        if (a.length === 0 && b.length === 0)
+            return emptySubst()
+        if (a.length ===  b.length)
+            throw new UnificationMismatch(a, b)
+        let [t1, ...ts1] = a
+        let [t2, ...ts2] = b
+        let su1 = unifies(t1, t2)
+        let su2 = unifyMany(apply(su1, ts1), apply(su1, ts2))
+        return compose(su2, su1)
+    }
+
+let unifies: (a: Type, b: Type) => Subst
+    = (t1, t2) => {
+        if (t1 === t2) return emptySubst()
+        if (t1 instanceof TVar)
+            return bind(t1, t2)
+        if (t2 instanceof TVar)
+            return bind(t2, t1)
+        if (t1 instanceof TArr && t2 instanceof TArr)
+            return unifyMany([t1.left, t1.right], [t2.left, t2.right])
+        throw new UnificationFail(t1, t2)
+    }
+
+let solver: (u: Unifier) => Subst
+    = ([su, cs]) => {
+        if (cs.length === 0) return su
+        let [head, ...cs0] = cs
+        let [t1, t2] = head.value
+        let su1 = unifies(t1, t2)
+        return solver([compose(su1, su), apply(su1, cs0)])
+    }
+
+let bind: (v: TVar, t: Type) => Subst
+    = (a, t) => {
+        if (a instanceof TVar) {
+            if (a !== t) {
+                if (occursCheck(a, t))
+                    throw new InfiniteType(a, t)
+                new Map([[a, t]])
+            }
+        }
+        return emptySubst()
+    }
+
+let occursCheck: (v: TVar, t: Substitutable) => boolean
+    = (a, t) => setMember(a, ftv(t))
+
+///////////////////////////////////////////////////////////////////////////////
+
+export function tryExpr(i: Infer<StateT>, expr: Expr, env: TypeEnv): Infer<StateT> {
     try {
-        return infer(env, expr)
+        return infer(i, expr)
     } catch (err) {
-        if (err instanceof TypeCheckError) {
-            err
-            console.error(err)
-        } else
-        if (err instanceof InfiniteType) {
-            err
-            console.error(err)
-        } else
-        if (err instanceof UnificationFail) {
-            err
+
+        if (   err instanceof TypeCheckError
+            || err instanceof InfiniteType
+            || err instanceof UnificationFail
+        ) {
             console.error(err)
         }
         throw err
@@ -420,23 +536,34 @@ export function tryExpr(expr: Expr, env: TypeEnv): [Subst, Type] {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-const var1 = fresh();
-const var2 = fresh();
-const pairType = new TArr(var1, var2)
+let ppscheme: (a: Scheme) => string
+    = (a) => ppr(a)
 
-const var3 = fresh();
+let ppsignature: (a: string, b: Scheme) => string
+    = (a, b) => `${a} : ${ppscheme(b)}`
+
+///////////////////////////////////////////////////////////////////////////////
+
+// const var1 = fresh();
+// const var2 = fresh();
+// const pairType = new TArr(var1, var2)
+
+// const var3 = fresh();
 
 let env: TypeEnv = new Map([
-    ['pair', generalize(new Map(), new TArr(var1, new TArr(var2, pairType)))],
+    // ['pair', generalize(new Map(), new TArr(var1, new TArr(var2, pairType)))],
     ['true', generalize(new Map(), typeBool)],
-    ['cond', generalize(new Map(), new TArr(typeBool, new TArr(var3, new TArr(var3, var3))))],
-    ['zero', generalize(new Map(), new TArr(typeInt, typeBool))],
-    ['pred', generalize(new Map(), new TArr(typeInt, typeInt))],
-    ['times', generalize(new Map(), new TArr(typeInt, new TArr(typeInt, typeInt)))],
+    ['false', generalize(new Map(), typeBool)],
+    // ['cond', generalize(new Map(), new TArr(typeBool, new TArr(var3, new TArr(var3, var3))))],
+    // ['zero', generalize(new Map(), new TArr(typeInt, typeBool))],
+    // ['pred', generalize(new Map(), new TArr(typeInt, typeInt))],
+    // ['times', generalize(new Map(), new TArr(typeInt, new TArr(typeInt, typeInt)))],
 ])
 
-const ast = [
-    new App(new App(new Var("pair"), new LInt(5)), new Var("true")),
+const ast: [string, Expr][] = [
+    // new App(new App(new Var("pair"), new LInt(5)), new Var("true")),
+    ['5', new LInt(5)],
+    ['true', new Var("true")],
 ]
 
 // const tvarA = fresh();
@@ -448,33 +575,36 @@ const ast = [
 // console.log(ppr(forAllTest))
 // console.log(ppr(forAllTest2))
 
-for (let example of ast) {
-    const rv = tryExpr(example, env);
-    if (rv == null) {
-        rv
-        continue
-    }
+let i = new Infer<StateT>(env)
+let tyCtx = inferTop(i, env, ast)
 
-    let [s, type] = rv
-    // let txt = `${ppr(example)} :: ${ppr(type)}`
-    // console.log(ppr(example))
-    // console.log(ppr(type))
-    // console.log(txt)
-}
+let sig = ppsignature('5', tyCtx.get('5')!)
+sig
+sig = ppsignature('true', tyCtx.get('true')!)
+sig
 
-console.log(ppr(env.get('pair')!))
+// for (let example of ast) {
+//     const rv = tryExpr(i, example, env);
+//     if (rv == null) {
+//         rv
+//         continue
+//     }
+
+//     console.log(rv.inferState)
+//     console.log(rv.env)
+//     console.log(rv.state)
+
+//     let [s, constraints] = rv.state
+
+//     s
+//     constraints
+//     let solved = runSolve(constraints)
+//     console.log(solved)
+// }
+
+// inferTop
+// constraintsExpr
+// console.log(ppr(env.get('pair')!))
 // console.log(ppr(env.get('true')!))
-
-///////////////////////////////////////////////////////////////////////////////
-
-type Constraint = {
-    type: Type
-    subs: Type
-}
-
-type Unifier = {
-    subs: Subst
-    cons: Constraint[]
-}
 
 ///////////////////////////////////////////////////////////////////////////////
