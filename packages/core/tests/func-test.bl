@@ -1,6 +1,6 @@
 
-func sayhi(a, b) {
-    return print(a, b);
+func sayhi(a) {
+    return print(a);
 }
 
-sayhi(8000);
+sayhi(8000)('hello');
