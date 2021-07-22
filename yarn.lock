@@ -1821,6 +1821,11 @@
   dependencies:
     "@octokit/openapi-types" "^8.2.1"
 
+"@practical-fp/union-types@^1.5.1":
+  version "1.5.1"
+  resolved "https://registry.yarnpkg.com/@practical-fp/union-types/-/union-types-1.5.1.tgz#10f9b2444a8d36b0668e44beab9b4fc11509e674"
+  integrity sha512-JAyEdF0KYoAZ3I0rWNTgYZxW+W9zytZc7d0OWKyywsM3G2kPInTO2OWPUTscys0N9mTbjIBGkSfo2opIBG7s1A==
+
 "@rollup/plugin-babel@^5.2.0":
   version "5.3.0"
   resolved "https://registry.yarnpkg.com/@rollup/plugin-babel/-/plugin-babel-5.3.0.tgz#9cb1c5146ddd6a4968ad96f209c50c62f92f9879"

@@ -16,6 +16,7 @@
     "serve": "webpack serve"
   },
   "devDependencies": {
+    "@practical-fp/union-types": "^1.5.1",
     "@types/chalk": "^2.2.0",
     "@types/insert-css": "^2.0.0",
     "@types/node": "^15.12.4",
