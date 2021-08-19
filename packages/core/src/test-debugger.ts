@@ -1,11 +1,8 @@
 import { resolve as resolvePath } from "path"
-import { Program } from "./Ast"
-import { bootstrap } from "./container"
-import { Token } from "./interface/Lexer"
-import { AstInterpreter } from "./lib/AstInterpreter"
-import { ConsoleLogger } from "./lib/ConsoleLogger"
+import { AstDebuggableInterpreter } from "./lib/AstDebugger"
 import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
+import { findNodeForToken } from "./lib/QueryVisitor"
 import { StdLib } from "./lib/RuntimeLibrary"
 import { ConsoleReporter } from "./lib/SysReporter"
 import { TokenLexer } from "./lib/TokenLexer"
@@ -18,17 +15,47 @@ function main(args: string[]) {
 
     const filename = resolvePath(args[args.length - 1])
 
-    const typeEnv = new TypeEnv(GlobalTypes)
+    const reader = new FileReader(filename)
+    const reporter = new ConsoleReporter(reader, console)
 
-    return bootstrap<Token[], Program>({
-        reader: ()       => new FileReader(filename),
-        logger: ()       => new ConsoleLogger(),
-        reporter: (r, l) => new ConsoleReporter(r, l),
-        lexer: (r)       => new TokenLexer(r),
-        parser: (r)      => new TokenParser(r),
-        typechecker: (r) => new HindleyMilner(r, typeEnv),
-        interpreter: (r) => new AstInterpreter(r, StdLib),
-    })(debugMode)
+    const tokens = new TokenLexer(reader).lex()
+    const parser = new TokenParser(reader)
+    const ast = parser.parse(tokens)
+
+    reporter.reportParserErrors(parser, process.exit)
+
+    const typeEnv = new TypeEnv(GlobalTypes)
+    const typeChecker = new HindleyMilner(reader, typeEnv)
+
+    typeChecker.validate(ast)
+
+    reporter.reportTypeErrors(typeChecker, process.exit)
+
+    const interpreter = new AstDebuggableInterpreter(reader, StdLib)
+
+    const breakpoint = findNodeForToken(ast, tokens[1])!
+    const breakpoint2 = findNodeForToken(ast, tokens[5])!
+
+    console.log('breakpoint:', breakpoint.toString())
+    console.log('breakpoint2:', breakpoint2.toString())
+
+    interpreter.debugService.addBreakpointOn(breakpoint)
+    interpreter.debugService.addBreakpointOn(breakpoint2)
+
+    interpreter.execute(ast)
+
+    let finished = false
+    interpreter.process.events.on('complete', () => {
+        finished  = true
+    })
+
+    const callback = () => {
+        interpreter.debugService.continue()
+        if (finished) { return }
+        setTimeout(callback, 5000)
+    }
+
+    setTimeout(callback, 5)
 }
 
 try {
@@ -41,7 +68,6 @@ try {
     // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/func-test.bl'])
     // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl'])
 
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/import-test.bl'])
     main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl'])
 } catch (err) {
     console.error(err)

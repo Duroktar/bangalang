@@ -1,7 +1,7 @@
-import type { LiteralToken, OperatorToken, Token, TokenOf, VariableToken } from "./Lexer";
-import { TokenKind } from "./Lexer";
+import type { LiteralToken, OperatorToken, Token, TokenOf, VariableToken } from "./interface/Lexer";
+import { TokenKind } from "./interface/Lexer";
+import type { Visitable, Visitor } from "./interface/Visitor";
 import { UNREACHABLE } from "./lib/utils";
-import type { Visitable, Visitor } from "./Visitor";
 
 export type Program =
     | AstNode[]
@@ -10,6 +10,7 @@ export type AstNode =
     | Declaration
 
 export type Declaration =
+    | ClassDeclaration
     | FuncDeclaration
     | LetDeclaration
     | Statement
@@ -24,9 +25,43 @@ export type Expression =
     | AssignExpr
     | BinaryExpr
     | CallExpr
+    | CaseExpr
     | LiteralExpr
     | VariableExpr
     | GroupingExpr
+
+export type CaseMatcher =
+    | LiteralExpr
+    | VariableExpr
+    | GroupingExpr
+
+export type CaseExprCase = {
+    matcher: CaseMatcher
+    ifMatch: Expression
+};
+
+export class ClassDeclaration implements Visitable {
+    public kind = 'ClassDeclaration' as const
+    constructor(
+        public name: VariableToken,
+        public methods: FuncDeclaration[],
+    ) { }
+
+    acceptVisitor = (visitor: Visitor) => {
+        return visitor.visitClassDeclaration(this);
+    };
+
+    toString(): string {
+        const name = this.name.value;
+        // const params = this.methods
+        //     .map(o => o.value)
+        //     .join(', ');
+        // const body = this.body.toString();
+        return `class ${name} { TODO }`;
+    }
+
+    static is = (other: AstNode): other is ClassDeclaration => (other.kind === 'ClassDeclaration')
+}
 
 export class FuncDeclaration implements Visitable {
     public kind = 'FuncDeclaration' as const
@@ -35,9 +70,10 @@ export class FuncDeclaration implements Visitable {
         public params: VariableToken[],
         public body: BlockStmt,
         public func: TokenOf<TokenKind.FUNC>,
+        public varargs: boolean = false,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitFuncDeclaration(this);
     };
 
@@ -49,6 +85,8 @@ export class FuncDeclaration implements Visitable {
         const body = this.body.toString();
         return `func ${name}(${params}) ${body}`;
     }
+
+    static is = (other: AstNode): other is FuncDeclaration => (other.kind === 'FuncDeclaration')
 }
 
 export class LetDeclaration implements Visitable {
@@ -59,7 +97,7 @@ export class LetDeclaration implements Visitable {
         public token: TokenOf<TokenKind.LET>,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitLetDeclaration(this);
     };
 
@@ -68,6 +106,8 @@ export class LetDeclaration implements Visitable {
         const init = this.init.toString();
         return `let ${name} = ${init}`
     }
+
+    static is = (other: AstNode): other is LetDeclaration => (other.kind === 'LetDeclaration')
 }
 
 export class ExpressionStmt implements Visitable {
@@ -77,13 +117,15 @@ export class ExpressionStmt implements Visitable {
         public token: Token,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitExpressionStmt(this);
     };
 
     toString(): string {
         return this.expr.toString()
     }
+
+    static is = (other: AstNode): other is ExpressionStmt => (other.kind === 'ExpressionStmt')
 }
 
 export class AssignExpr implements Visitable {
@@ -93,7 +135,7 @@ export class AssignExpr implements Visitable {
         public value: Expression,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitAssignExpr(this);
     };
 
@@ -102,6 +144,8 @@ export class AssignExpr implements Visitable {
         const value = this.value.toString();
         return `${name} = ${value}`
     }
+
+    static is = (other: AstNode): other is AssignExpr => (other.kind === 'AssignExpr')
 }
 
 export class BinaryExpr implements Visitable {
@@ -112,7 +156,7 @@ export class BinaryExpr implements Visitable {
         public right: Expression,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitBinaryExpr(this);
     };
 
@@ -122,6 +166,8 @@ export class BinaryExpr implements Visitable {
         const right = this.right.toString();
         return `${left} ${op} ${right}`
     }
+
+    static is = (other: AstNode): other is BinaryExpr => (other.kind === 'BinaryExpr')
 }
 
 export class CallExpr implements Visitable {
@@ -132,7 +178,7 @@ export class CallExpr implements Visitable {
         public args: Expression[],
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitCallExpr(this);
     };
 
@@ -141,6 +187,8 @@ export class CallExpr implements Visitable {
         const args = this.args.map(o => o.toString());
         return `${callee}(${args.join(', ')});`;
     }
+
+    static is = (other: AstNode): other is CallExpr => (other.kind === 'CallExpr')
 }
 
 export class LiteralExpr implements Visitable {
@@ -151,11 +199,13 @@ export class LiteralExpr implements Visitable {
         public token: LiteralToken,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitLiteralExpr(this);
     };
 
     toString(): string { return String(this.value) }
+
+    static is = (other: AstNode): other is LiteralExpr => (other.kind === 'LiteralExpr')
 }
 
 export class VariableExpr implements Visitable {
@@ -165,11 +215,15 @@ export class VariableExpr implements Visitable {
         public token: VariableToken,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitVariableExpr(this);
     };
 
     toString(): string { return this.name }
+
+    isUnderscore(): boolean { return this.name === '_' }
+
+    static is = (other: AstNode): other is VariableExpr => (other.kind === 'VariableExpr')
 }
 
 export class GroupingExpr implements Visitable {
@@ -179,13 +233,34 @@ export class GroupingExpr implements Visitable {
         public token: Token,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitGroupingExpr(this);
     };
 
     toString(): string {
         return `(${this.expr.toString()})`
     }
+
+    static is = (other: AstNode): other is GroupingExpr => (other.kind === 'GroupingExpr')
+}
+
+export class CaseExpr implements Visitable {
+    public kind = 'CaseExpr' as const
+    constructor(
+        public expr: Expression,
+        public cases: CaseExprCase[],
+        public token: Token,
+    ) { }
+
+    acceptVisitor = (visitor: Visitor) => {
+        return visitor.visitCaseExpr(this);
+    };
+
+    toString(): string {
+        return `case`
+    }
+
+    static is = (other: AstNode): other is CaseExpr => (other.kind === 'CaseExpr')
 }
 
 export class BlockStmt implements Visitable {
@@ -194,7 +269,7 @@ export class BlockStmt implements Visitable {
         public stmts: Statement[],
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitBlockStmt(this);
     };
 
@@ -204,6 +279,8 @@ export class BlockStmt implements Visitable {
             .join('\n');
         return `{\n${stmts}\n}`
     }
+
+    static is = (other: AstNode): other is BlockStmt => (other.kind === 'BlockStmt')
 }
 
 export class ReturnStmt implements Visitable {
@@ -213,13 +290,15 @@ export class ReturnStmt implements Visitable {
         public value: Expression,
     ) { }
 
-    accept = (visitor: Visitor) => {
+    acceptVisitor = (visitor: Visitor) => {
         return visitor.visitReturnStmt(this);
     };
 
     toString(): string {
         return `return ${this.value.toString()}`
     }
+
+    static is = (other: AstNode): other is ReturnStmt => (other.kind === 'ReturnStmt')
 }
 
 export function kindName(kind: Expression['kind']): string {
@@ -230,6 +309,7 @@ export function kindName(kind: Expression['kind']): string {
         case 'LiteralExpr': return 'literal';
         case 'VariableExpr': return 'variable';
         case 'CallExpr': return 'call';
+        case 'CaseExpr': return 'case';
         default:
             return UNREACHABLE(kind)
     }

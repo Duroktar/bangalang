@@ -1,9 +1,9 @@
 import type * as Ast from '../Ast';
-import { getToken, lineInfo, Token } from '../Lexer';
-import { TypeCheckError, TypeName } from '../Types';
+import { getToken, lineInfo, Token } from '../interface/Lexer';
+import { TypeCheckError, TypeName } from '../interface/TypeCheck';
 import { format, UNREACHABLE, zip } from "./utils";
 
-function error(msg: string, token?: Token) {
+function error(msg: string, token: Token) {
     return new TypeCheckError(msg, token)
 }
 
@@ -38,7 +38,7 @@ class TypeVariable {
     }
 
     static NextVariableId = 'a'
-    
+
     private __name?: string
 }
 
@@ -96,7 +96,7 @@ export class TypeEnv {
     get(name: string, nonGeneric: Set<TyVar>) {
         if (name in this.map)
             return fresh(this.map[name], nonGeneric)
-        throw 'undefined symbol: ' + name
+        throw '[TypeEnv]: Undefined symbol: ' + name
     }
     extend(name: string, val: TyVar) {
         Object.assign(this.map, { [name]: val })
@@ -174,6 +174,12 @@ let analyze: (a: Ast.AstNode, b: TypeEnv, c?: Set<TyVar>) => TyVar
         term.stmts.forEach(stmt => analyze(stmt, env, nonGeneric))
         return Object.assign(term, { type: neverType }).type
     }
+    if (term.kind === 'CaseExpr') {
+        throw new Error('Not implemented: "CaseExpr" in analyzeRec')
+    }
+    if (term.kind === 'ClassDeclaration') {
+        throw new Error('Not implemented: "ClassDeclaration" in analyzeRec')
+    }
 
     return UNREACHABLE(term, new Error('unreachable: analyze -> ' + (<any>term).kind))
 }
@@ -231,7 +237,7 @@ function unify(t1: TyVar, t2: TyVar, term: Ast.Expression | Ast.Statement): void
             throw handleTypeOperatorsUnificationError(a, b, term)
         zip(a.types, b.types).forEach(([t1, t2]) => unify(t1, t2, term))
     } else {
-        throw error('Not unified')
+        throw error('Not unified', getToken(term))
     }
 }
 

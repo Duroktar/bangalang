@@ -8,13 +8,13 @@ export function sourceDiagnosticsProvider(source: string): SourceDiagnostics {
     const lexer = new TokenLexer(reader);
     const tokens = lexer.lex();
 
-    const parser = new TokenParser(tokens, reader);
-    const ast = parser.parseProgram();
+    const parser = new TokenParser(reader);
+    const ast = parser.parse(tokens);
 
-    const typeChecker = new HindleyMilner(reader);
+    const typeEnv = new TypeEnv(GlobalTypes);
+    const typeChecker = new HindleyMilner(reader, typeEnv);
 
-    const typeEnv = new TypeEnv(typeChecker, GlobalTypes);
-    const types = typeChecker.typecheck(ast, typeEnv);
+    const types = typeChecker.validate(ast);
 
     const errors = [...parser.errors, ...typeChecker.errors];
 

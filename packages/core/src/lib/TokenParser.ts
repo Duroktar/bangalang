@@ -1,20 +1,22 @@
 import * as Ast from "../Ast";
-import { LiteralToken, OperatorToken, Token, TokenOf, TokenKind, VariableToken, NumberToken, StringToken, getToken } from "../Lexer";
-import { Parser, ParserError } from "../Parser";
-import { underline } from "./utils";
-import type { Reader } from "../Reader";
 import { BlockStmt, Declaration, FuncDeclaration, LetDeclaration, Statement } from "../Ast";
+import { getToken, LiteralToken, NumberToken, OperatorToken, StringToken, Token, TokenKind, TokenOf, VariableToken } from "../interface/Lexer";
+import { Parser, ParserError } from "../interface/Parser";
+import type { Reader } from "../interface/Reader";
+import { underline } from "./utils";
 
 export class TokenParser implements Parser<Token[], object[]> {
     public errors: ParserError[] = []
+    public input: Token[] = []
 
-    constructor(public input: Token[], private reader: Reader) {}
+    constructor(private reader: Reader) {}
 
     hadErrors() {
         return this.errors.length != 0
     }
 
-    parseProgram(): Ast.Program {
+    parse(tokens: Token[]): Ast.Program {
+        this.input = tokens;
         const stmts: Ast.Program = []
         while (!this.isAtEnd())
             stmts.push(this.declaration())
@@ -23,6 +25,9 @@ export class TokenParser implements Parser<Token[], object[]> {
 
     declaration(): Declaration {
         try {
+            if (this.match(TokenKind.CLASS)) {
+                return this.classDecl()
+            }
             if (this.match(TokenKind.FUNC)) {
                 return this.funcDecl('function')
             }
@@ -38,10 +43,30 @@ export class TokenParser implements Parser<Token[], object[]> {
         }
     }
 
+    classDecl(): Ast.ClassDeclaration {
+        // const token = this.previous<TokenKind.FUNC>()
+        // const name = this.consume(TokenKind.IDENTIFIER, "Expected " + kind + " name.")
+
+        // this.consume(TokenKind.LEFT_PAREN, "Expected '(' after " + kind + " name")
+        // const parameters: VariableToken[] = []
+        // if (!this.check(TokenKind.RIGHT_PAREN)) {
+        //     do {
+        //         if (parameters.length >= 255)
+        //             throw new ParserError("Can't have more than 255 parameters.", this.peek())
+        //         parameters.push(this.consume(TokenKind.IDENTIFIER, "Expected variable."))
+        //     } while (this.match(TokenKind.COMMA))
+        // }
+        // this.consume(TokenKind.RIGHT_PAREN, "Expected ')' after parameters")
+
+        // this.consume(TokenKind.LEFT_BRACE, "Expected '{' before " + kind + " body")
+        // return new FuncDeclaration(name, parameters, new BlockStmt(this.block()), token);
+        return null as any
+    }
+
     funcDecl(kind: string): FuncDeclaration {
         const token = this.previous<TokenKind.FUNC>()
         const name = this.consume(TokenKind.IDENTIFIER, "Expected " + kind + " name.")
-        
+
         this.consume(TokenKind.LEFT_PAREN, "Expected '(' after " + kind + " name")
         const parameters: VariableToken[] = []
         if (!this.check(TokenKind.RIGHT_PAREN)) {
@@ -65,8 +90,8 @@ export class TokenParser implements Parser<Token[], object[]> {
 
         const init = this.expression()
 
-        this.consume(TokenKind.SEMI, "Expected ';' after declaration.")
-
+        // this.consume(TokenKind.SEMI, "Expected ';' after declaration.")
+        this.munchSemicolon()
         return new Ast.LetDeclaration(name, init, token)
     }
 
@@ -83,7 +108,8 @@ export class TokenParser implements Parser<Token[], object[]> {
     returnStatement(): Ast.ReturnStmt {
         const keyword = this.previous<TokenKind.RETURN>();
         const value = this.expression();
-        this.consume(TokenKind.SEMI, "Expect ';' after return value.");
+        // this.consume(TokenKind.SEMI, "Expect ';' after return value.");
+        this.munchSemicolon()
         return new Ast.ReturnStmt(keyword, value);
     }
 
@@ -94,12 +120,14 @@ export class TokenParser implements Parser<Token[], object[]> {
         }
 
         this.consume(TokenKind.RIGHT_BRACE, "Expected '}' after block.")
+        this.munchSemicolon()
         return statements
     }
 
     exprStmt() {
         const expr = this.expression()
-        this.consume(TokenKind.SEMI, "Expected ';' after expression.")
+        // this.consume(TokenKind.SEMI, "Expected ';' after expression.")
+        this.munchSemicolon()
         return new Ast.ExpressionStmt(expr, getToken(expr))
     }
 
@@ -108,7 +136,7 @@ export class TokenParser implements Parser<Token[], object[]> {
     }
 
     assignment(): Ast.Expression {
-        const expr = this.term()
+        const expr = this.case()
         if (this.match(TokenKind.EQUAL)) {
             const equals = this.previous()
             const value = this.assignment()
@@ -120,9 +148,45 @@ export class TokenParser implements Parser<Token[], object[]> {
                 const err = `\n${src}\n${arrows}\n${msg}`
                 throw new ParserError(err, equals)
             }
+            // this.consume(TokenKind.SEMI, "Expected ';' after assignment.")
+            this.munchSemicolon()
             return new Ast.AssignExpr(expr.token, value)
         }
         return expr
+    }
+
+    case(): Ast.Expression {
+        if (this.match(TokenKind.CASE)) {
+            const token = this.previous()
+            this.consume(TokenKind.LEFT_PAREN, "Expected '(' before case expr.")
+            const expr = this.tryWithErrMsg(() => this.term(), 'Expected expression to match against.');
+            this.consume(TokenKind.RIGHT_PAREN, "Expected ')' after case expr.")
+            this.consume(TokenKind.LEFT_BRACE, "Expected '{' before case block.")
+            const cases: Ast.CaseExprCase[] = [];
+            if (!this.check(TokenKind.RIGHT_BRACE)) {
+                do {
+                    if (cases.length >= 255) {
+                        const msg = "Can't have more than 255 arguments.";
+                        throw new ParserError(msg, this.peek());
+                    }
+                    const atom = this.tryWithErrMsg(() => this.primary(false), 'Expected expression to match with.')
+                    this.consume(TokenKind.ARROW, "Expected '->' before case block.")
+                    const expr = this.tryWithErrMsg(() => this.case(), 'Expected expression in case.');
+                    cases.push({ matcher: atom, ifMatch: expr });
+                    this.consume(TokenKind.SEMI, "Expected ';' after case.")
+                } while (!this.check(TokenKind.RIGHT_BRACE));
+            }
+
+            this.consume(TokenKind.RIGHT_BRACE, "Expected '}' after case block.");
+
+            this.munchSemicolon()
+            return new Ast.CaseExpr(expr, cases, token)
+        }
+        return this.term()
+    }
+
+    munchSemicolon() {
+        while (this.match(TokenKind.SEMI)) {}
     }
 
     term() {
@@ -138,37 +202,50 @@ export class TokenParser implements Parser<Token[], object[]> {
     call() {
         let expr: Ast.Expression = this.primary();
 
-        while (true) { 
+        while (true) {
             if (this.match(TokenKind.LEFT_PAREN)) {
                 expr = this.finishCall(expr);
             } else {
                 break;
             }
         }
-    
+
         return expr;
+    }
+
+    private tryWithErrMsg = (fn: Function, err: string) => {
+        try {
+            return fn()
+        } catch (e) {
+            // console.log(e)
+            e.__message = e.message
+            e.__token = e.token
+            e.message = err
+            e.token = e.token ?? this.peek()
+            throw e
+        }
     }
 
     private finishCall(callee: Ast.Expression) {
         const args: Ast.Expression[] = [];
         if (!this.check(TokenKind.RIGHT_PAREN)) {
-          do {
-            if (args.length >= 255) {
-                const msg = "Can't have more than 255 arguments.";
-                throw new ParserError(msg, this.peek());
-            }
-            args.push(this.expression());
-          } while (this.match(TokenKind.COMMA));
+            do {
+                if (args.length >= 255) {
+                    const msg = "Can't have more than 255 arguments.";
+                    throw new ParserError(msg, this.peek());
+                }
+                args.push(this.expression());
+            } while (this.match(TokenKind.COMMA));
         }
-    
+
         const paren = this.consume(TokenKind.RIGHT_PAREN,
                               "Expected ')' after args.");
-    
+
         return new Ast.CallExpr(callee, paren, args);
-        
+
     }
 
-    primary() {
+    primary(group = true) {
         if (this.match(TokenKind.TRUE))
             new Ast.LiteralExpr(true, 'true', <LiteralToken>this.previous())
         if (this.match(TokenKind.FALSE))

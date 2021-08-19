@@ -91,7 +91,7 @@ class TypeVariable {
     }
 
     static NextVariableId = 'a'
-    
+
     private __name?: string
 }
 
@@ -136,7 +136,7 @@ export class TypeEnv {
     get(name: string, nonGeneric: Set<TyVar>) {
         if (name in this.map)
             return fresh(this.map[name], nonGeneric)
-        throw 'undefined symbol: ' + name
+        throw '[TypeEnv]: Undefined symbol: ' + name
     }
     extend(name: string, val: TyVar) {
         Object.assign(this.map, { [name]: val })

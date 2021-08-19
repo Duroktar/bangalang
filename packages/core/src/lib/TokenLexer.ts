@@ -1,5 +1,5 @@
-import type { Reader } from "../Reader"
-import { KeywordType, Kinded, Lexer, LexerError, Position, Range, Token, TokenKind as _ } from "../Lexer"
+import type { Reader } from "../interface/Reader"
+import { getKeywordType, Lexer, LexerError, Position, Range, Token, TokenKind as _ } from "../interface/Lexer"
 
 export class TokenLexer implements Lexer<Token[]> {
     constructor(public reader: Reader) { }
@@ -15,9 +15,17 @@ export class TokenLexer implements Lexer<Token[]> {
                 case '}': this.addToken(_.RIGHT_BRACE); break;
                 case ';': this.addToken(_.SEMI); break;
                 case '+': this.addToken(_.PLUS); break;
-                case '-': this.addToken(_.MINUS); break;
                 case '=': this.addToken(_.EQUAL); break;
                 case ',': this.addToken(_.COMMA); break;
+                case '-': {
+                    if (this.peekAhead() === '>') {
+                        this.advance();
+                        this.addToken(_.ARROW);
+                    } else {
+                        this.addToken(_.MINUS);
+                    }
+                    break;
+                }
                 case '"':
                 case "'":
                     this.parseStr(current)
@@ -179,17 +187,3 @@ export class TokenLexer implements Lexer<Token[]> {
 
     private tokens: Token[] = []
 }
-
-const keywordTypeMap = {
-    'true': _.TRUE,
-    'false': _.FALSE,
-    'let': _.LET,
-    'func': _.FUNC,
-    'return': _.RETURN,
-} as ObjOf<KeywordType>;
-
-function getKeywordType(op: string) {
-    return keywordTypeMap[op]
-}
-
-type ObjOf<T> = { [key: string]: T | undefined }

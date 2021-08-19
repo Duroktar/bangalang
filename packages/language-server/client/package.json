@@ -1,10 +1,10 @@
 {
-	"name": "@bangalang/language-server__client",
+	"name": "bangalang-language-server-client",
 	"description": "VSCode part of a language server",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"version": "0.0.1",
-	"publisher": "vscode",
+	"publisher": "traBpUkciP",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/Microsoft/vscode-extension-samples"
@@ -13,10 +13,12 @@
 		"vscode": "^1.52.0"
 	},
 	"dependencies": {
-		"vscode-languageclient": "^7.0.0"
+		"vscode-languageclient": "^7.0.0",
+		"vscode": "^1.1.37"
 	},
 	"devDependencies": {
 		"@types/vscode": "^1.52.0",
+		"lru-cache": "^6.0.0",
 		"vscode-test": "^1.3.0"
 	}
 }

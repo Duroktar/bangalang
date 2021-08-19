@@ -1,15 +1,15 @@
 import { bold, cyan, red, yellow, yellowBright } from "chalk";
 import { relative } from "path";
 import * as Ast from "../Ast";
-import { lineInfo, Token } from "../Lexer";
-import type { Logger } from "../Logger";
-import { Parser, ParserError } from "../Parser";
-import type { Reader } from "../Reader";
-import type { Reporter } from "../Reporter";
-import { TypeChecker, TypeCheckError, WithType } from "../Types";
+import { lineInfo, Token } from "../interface/Lexer";
+import type { Logger } from "../interface/Logger";
+import { Parser, ParserError } from "../interface/Parser";
+import type { Reader } from "../interface/Reader";
+import type { Reporter } from "../interface/Reporter";
+import { TypeChecker, TypeCheckError, WithType } from "../interface/TypeCheck";
 import { StringBuilder, underline } from "./utils";
 
-export class ConsoleReporter implements Reporter {
+export class ConsoleReporter implements Reporter<Token[], Ast.Program> {
     constructor(public reader: Reader, public logger: Logger) {}
 
     printObject(result: object): void {
@@ -45,7 +45,7 @@ export class ConsoleReporter implements Reporter {
         }
     }
 
-    reportTypeErrors(tc: TypeChecker, onError: () => void, depth = 1) {
+    reportTypeErrors(tc: TypeChecker<Ast.Program>, onError: () => void, depth = 1) {
         if (tc.errors.length > 0) {
             let max = Math.min(depth, tc.errors.length)
             for (let i = max - 1; i >= 0; i--) {

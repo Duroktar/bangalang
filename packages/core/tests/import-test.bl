@@ -1,0 +1,4 @@
+import('path');
+
+let rv = join('./', 'src', 'lib');
+print(rv);

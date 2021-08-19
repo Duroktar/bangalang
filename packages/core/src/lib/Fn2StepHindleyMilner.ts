@@ -1,4 +1,10 @@
 import { Variant, impl, Narrow, matchExhaustive } from "@practical-fp/union-types"
+import { Map, Set } from 'immutable'
+
+let match = matchExhaustive
+type InferArgs<T> =
+  T extends [string, ...infer Args] ? Args
+  : never
 
 // ----------------------------------------------------------------------------
 // -- Utils
@@ -7,19 +13,20 @@ import { Variant, impl, Narrow, matchExhaustive } from "@practical-fp/union-type
 //#region Utils
 let UNREACHABLE = (n: never, e?: any) => { if (e) throw e; return n; }
 
-let zip = <A, B>(a:A[], b:B[]) => a.map((k, i) => [k, b[i]]);
+let zip = <A, B>(a:A[], b:B[]): [A, B][] => a.map((k, i) => [k, b[i]]);
+let zipp = <A, B>(a:A[], b:{next:()=>B}): [A, B][] => a.map((k, i) => [k, b.next()]);
 
 let mapUnion: <K, V>(a: Map<K, V>, b: Map<K, V>) => Map<K, V>
-    = (m1, m2) => new Map([...m1, ...m2.entries()])
+    = (m1, m2) => Map([...m1.entries(), ...m2.entries()])
 
 let mapMap: <K, A>(f: (v: A) => A, map: Map<K, A>) => Map<K, A>
-    = (fn, map, __rv = new Map()) => <any>map.forEach((v, k) => __rv.set(k, fn(v))) || __rv
+    = (fn, map) => map.mapEntries(([k, v]) => [k, fn(v)])
 
 let setUnion: <V>(a: Set<V>, b: Set<V>) => Set<V>
-    = (s1, s2) => new Set([...s1, ...s2])
+    = (s1, s2) => Set([...s1, ...s2])
 
 let setDifference: <T>(a: Set<T>, b: Set<T>) => Set<T>
-    = (s1, s2) => new Set([...s1].filter(x => !s2.has(x)));
+    = (s1, s2) => s1.filter(x => !s2.has(x))
 
 let setMember: <T>(a: T, b: Set<T>) => boolean
     = (s1, s2) => s2.has(s1)
@@ -30,6 +37,9 @@ let setMember: <T>(a: T, b: Set<T>) => boolean
 // ----------------------------------------------------------------------------
 
 //#region Types
+
+// terms
+
 type Name = string
 
 type Expr =
@@ -54,12 +64,16 @@ let { LInt, LBool } = impl<Lit>()
 
 enum Binop { Add, Sub, Mul, Eql }
 
+// types
+
 type Type =
     | TVar
-    | Variant<"TCon", Name>
-    | Variant<"TArr", [Type, Type]>
+    | TCon
+    | TArr
 
 type TVar = Variant<"TVar", Name>
+type TCon = Variant<"TCon", Name>
+type TArr = Variant<"TArr", [Type, Type]>
 
 let { TVar, TCon, TArr } = impl<Type>()
 
@@ -69,6 +83,7 @@ const typeBool: Type = TCon('Bool')
 type Scheme = Variant<"ForAll", [TVar[], Type]>
 
 let { ForAll } = impl<Scheme>()
+
 //#endregion
 
 // ----------------------------------------------------------------------------
@@ -86,7 +101,7 @@ let extend: (e: TypeEnv, t: [Name, Scheme | Type]) => TypeEnv
     = (env, t) => {
         let [name, scheme] = t
         scheme = ForAll.is(scheme) ? scheme : ForAll([[], scheme])
-        return TypeEnv(new Map([...env.value.entries(), [name, scheme]]))
+        return TypeEnv(env.value.set(name, scheme))
     }
 //#endregion
 
@@ -95,20 +110,6 @@ let extend: (e: TypeEnv, t: [Name, Scheme | Type]) => TypeEnv
 // ----------------------------------------------------------------------------
 
 //#region Classes
-
-class Infer<T> {
-    constructor(
-        public env: TypeEnv,
-        public stateT?: T,
-        public inferState: InferState = { count: 0 },
-    ) {}
-
-    get state() { return this.stateT! }
-}
-
-type InferState = { count: number }
-
-let initInfer = (): InferState => ({ count: 0 })
 
 type StateM = [Type, Constraint[]];
 
@@ -140,7 +141,7 @@ let apply: <T extends Substitutable>(s: Subst, t: T) => T
                 let s1 = as.reduce((acc, val) => {
                     acc.delete(val)
                     return acc
-                }, new Map(s.entries()))
+                }, Map(s.entries()))
                 return ForAll([as, apply(s1, t)])
             },
             Constraint: ([tp, cs]) => Constraint([apply(s, tp), apply(s, cs)]),
@@ -151,12 +152,12 @@ let apply: <T extends Substitutable>(s: Subst, t: T) => T
 let ftv: (t: Substitutable) => Set<TVar>
     = t => {
         if (Array.isArray(t))
-            return t.reduce((acc, val) => setUnion(acc, ftv(val)), new Set<TVar>())
-        
+            return t.reduce((acc, val) => setUnion(acc, ftv(val)), Set<TVar>())
+
         return matchExhaustive(t, {
             TypeEnv: env => ftv([...env.values()]),
-            TCon: _ => new Set<TVar>(),
-            TVar: name => new Set<TVar>([TVar(name)]),
+            TCon: _ => Set<TVar>(),
+            TVar: name => Set<TVar>([TVar(name)]),
             TArr: ([left, right]) => setUnion(ftv(left), ftv(right)),
             ForAll: ([as, ty]) => setDifference(ftv(ty), ftv(as)),
             Constraint: ([e1, e2]) => setUnion(ftv(e1), ftv(e2))
@@ -178,40 +179,38 @@ let { InfiniteType, UnBoundVariable, UnificationFail, UnificationMismatch, Ambig
 // ----------------------------------------------------------------------------
 
 //#region Inference
-let runInfer: (e: TypeEnv, i: Infer<StateM>) => StateM
-    = (e, i) => {
-        return i.state
-    }
+let emptyEnv: () => Map<Name, Scheme>
+    = () => Map<Name, Scheme>()
 
-let inferExpr: (i: Infer<StateM>, e: TypeEnv, ex: Expr) => Scheme
-    = (i, env, ex) => {
-        let [ty, cs] = runInfer(env, infer(i, ex))
+let inferExpr: (e: TypeEnv, ex: Expr) => Scheme
+    = (env, ex) => {
+        let [ty, cs] = infer(ex, env)
         let subst = runSolve(cs)
         return closeOver(apply(subst, ty))
     }
 
-let constraintsExpr: (i: Infer<StateM>, e: TypeEnv, ex: Expr) => [Constraint[], Subst, Type, Scheme]
-    = (i, env, ex) => {
-        let [ty, cs] = runInfer(env, infer(i, ex))
+let constraintsExpr: (e: TypeEnv, ex: Expr) => [Constraint[], Subst, Type, Scheme]
+    = (env, ex) => {
+        let [ty, cs] = infer(ex, env)
         let subst = runSolve(cs)
-        const sc = closeOver(apply(subst, ty));
+        let sc = closeOver(apply(subst, ty));
         return [cs, subst, ty, sc]
     }
 
 let closeOver: (t: Type) => Scheme
-    = (t) => normalize(generalize(TypeEnv(new Map()), t))
+    = (t) => normalize(generalize(TypeEnv(emptyEnv()), t))
 
-let inEnv: <T>(o: EnvEntry, i: Infer<T>) => Infer<T>
-    = (o, i) => new Infer(extend(i.env, o), i.state, i.inferState)
+let inEnv: (o: EnvEntry, env: TypeEnv) => TypeEnv
+    = (o, env) => extend(env, o)
 
 let lookupEnv: (env: TypeEnv, v: Var) => Type
     = (env, x) => {
-        const rv = env.value.get(x.value)
+        let rv = env.value.get(x.value)
         if (rv == null)
-            throw UnBoundVariable(String(x))
+            throw UnBoundVariable(x.value)
         return instantiate(rv);
     }
-    
+
 let letters = (function() { let n = 1; let cb = () => `${String.fromCharCode((n++) + 97)}`; return { next: cb } })();
 
 let fresh: () => TVar = () => TVar(letters.next())
@@ -219,7 +218,7 @@ let fresh: () => TVar = () => TVar(letters.next())
 let instantiate: (s: Scheme) => Type
     = ({ value: [as, t] }) => {
         let as1 = as.map(fresh)
-        let s = new Map(zip(as, as1) as [TVar, Type][])
+        let s = Map(zip(as, as1) as [TVar, Type][])
         return apply(s, t)
     }
 
@@ -237,87 +236,111 @@ let ops: Record<Binop, Type>
         [Binop.Eql]: TArr([typeInt, TArr([typeInt, typeBool])]),
     }
 
-let infer: (i: Infer<StateM>, e: Expr) => Infer<StateM>
-    = (i, ex) => {
-        if (LInt.is(ex)) return ret(i, [typeInt, []])
-        if (LBool.is(ex)) return ret(i, [typeBool, []])
+let infer: (e: Expr, env: TypeEnv) => StateM
+    = (ex, env) => {
+        if (LInt.is(ex)) return [typeInt, []]
+        if (LBool.is(ex)) return [typeBool, []]
 
-        if (Var.is(ex))
-            return ret(i, [lookupEnv(i.env, ex), []])
+        if (Var.is(ex)) {
+            let fromEnv = lookupEnv(env, ex)
+            return [fromEnv, []]
+        }
 
         if (Lam.is(ex)) {
             let [ name, expr ] = ex.value
             let tv = fresh()
             let x: EnvEntry = [name, ForAll([[], tv])]
-            let [t, c] = inEnv(x, infer(i, expr)).state
-            return ret(i, [TArr([tv, t]), c])
+            let [t, c] = infer(expr, inEnv(x, env))
+            return [TArr([tv, t]), c]
         }
-    
+
         if (App.is(ex)) {
             let [ e1, e2 ] = ex.value
-            let [t1, c1] = infer(i, e1).state
-            let [t2, c2] = infer(i, e2).state
+            let [t1, c1] = infer(e1, env)
+            let [t2, c2] = infer(e2, env)
             let tv = fresh()
             let c3 = Constraint([t1, TArr([t2, tv])])
-            return ret(i, [tv, c1.concat(c2, c3)])
+            return [tv, c1.concat(c2, c3)]
         }
-    
+
         if (Let.is(ex)) {
             let [ x, e1, e2 ] = ex.value
-            let [t1, c1] = infer(i, e1).state
+            let [t1, c1] = infer(e1, env)
             let sub = runSolve(c1)
             let sc = generalize(apply(sub, env), apply(sub, t1))
-            apply(sub, infer(i, e2).env)
-            let [t2, c2] = inEnv([x, sc], i).state
-            return ret(i, [t2, c1.concat(c2)])
+            let env1 = apply(sub, inEnv([x, sc], env))
+            let [t2, c2] = infer(e2, env1)
+            return [t2, c1.concat(c2)]
         }
-        
+
         if (Fix.is(ex)) {
             let e1 = ex.value
-            let [t1, c1] = infer(i, e1).state
+            let [t1, c1] = infer(e1, env)
             let tv = fresh()
             let c2 = Constraint([TArr([tv, tv]), t1])
-            return ret(i, [tv, c1.concat(c2)])
+            return [tv, c1.concat(c2)]
         }
-    
+
         if (Op.is(ex)) {
             let [ op, e1, e2 ] = ex.value
-            let [t1, c1] = infer(i, e1).state
-            let [t2, c2] = infer(i, e2).state
+            let [t1, c1] = infer(e1, env)
+            let [t2, c2] = infer(e2, env)
             let tv = fresh()
             let u1 = TArr([t1, TArr([t2, tv])])
-            let u2 = ops[op]
-            let c3 = Constraint([u1, u2])
-            return ret(i, [tv, c1.concat(c2, c3)])
+            let c3 = Constraint([u1, ops[op]])
+            return [tv, c1.concat(c2, c3)]
         }
-    
+
         if (If.is(ex)) {
             let [ cond, tr, fl ] = ex.value
-            let [t1, c1] = infer(i, cond).state
-            let [t2, c2] = infer(i, tr).state
-            let [t3, c3] = infer(i, fl).state
+            let [t1, c1] = infer(cond, env)
+            let [t2, c2] = infer(tr, env)
+            let [t3, c3] = infer(fl, env)
             let c4 = Constraint([t1, typeBool])
             let c5 = Constraint([t2, t3])
-            return ret(i, [t2, c1.concat(c2, c3, c4, c5)])
+            return [t2, c1.concat(c2, c3, c4, c5)]
         }
 
         return UNREACHABLE(ex)
     }
 
-let inferTop: (i: Infer<StateM>, e: TypeEnv, o: [string, Expr][]) => TypeEnv
-    = (i, env, exprs) => {
+let inferTop: (e: TypeEnv, o: [string, Expr][]) => TypeEnv
+    = (env, exprs) => {
         if (exprs.length === 0)
             return env
         let [head, ...xs] = exprs
         let [name, ex] = head
-        
-        let ty = inferExpr(i, env, ex)
-        return inferTop(i, extend(env, [name, ty]), xs)
+
+        let ty = inferExpr(env, ex)
+        return inferTop(extend(env, [name, ty]), xs)
     }
 
 let normalize: (s: Scheme) => Scheme
     = (s) => {
-        return s
+        let [_, body] = s.value
+
+        let fv = (a: TArr | TVar | TCon): string[] => match(a, {
+            TVar: (a) => [a],
+            TArr: ([a, b]) => [...fv(a), ...fv(b)],
+            TCon: (_) => [],
+        })
+
+        let ord = zipp([...Set(fv(body))], letters)
+        let ordIndex = Map(ord)
+
+        let normType = (a: TArr | TVar | TCon): Type => match(a, {
+            TArr: ([a, b]) => TArr([normType(a), normType(b)]),
+            TCon: (a) => TCon(a),
+            TVar: (a) => {
+                let name = ordIndex.get(a)
+                if (name == null)
+                    throw new Error('Type Variable Not In Signature')
+                return TVar(name)
+            },
+        })
+
+        const tvars = ord.map(([, b]) => TVar(b))
+        return ForAll([tvars, normType(body)])
     }
 //#endregion
 
@@ -326,15 +349,17 @@ let normalize: (s: Scheme) => Scheme
 // ----------------------------------------------------------------------------
 
 //#region Solver
-let emptySubst: () => Subst = () => new Map()
+let emptySubst: () => Subst
+    = () => Map<TVar, Type>()
+
+let substOf: (v: TVar, t: Type) => Subst
+    = (v, t) => Map([[v, t]])
 
 let compose: (a: Subst, b: Subst) => Subst
     = (s1, s2) => mapUnion(mapMap(v => apply(s1, v), s2), s1)
 
 let runSolve: (a: Constraint[]) => Subst
-    = (cs) => {
-        return solver([emptySubst(), cs])
-    }
+    = (cs) => solver([emptySubst(), cs])
 
 let unifyMany: (a: Type[], b: Type[]) => Subst
     = (a, b) => {
@@ -376,7 +401,7 @@ let bind: (v: TVar, t: Type) => Subst
             if (a !== t) {
                 if (occursCheck(a, t))
                     throw InfiniteType([a, t])
-                new Map([[a, t]])
+                return substOf(a, t)
             }
         }
         return emptySubst()
@@ -387,83 +412,30 @@ let occursCheck: (v: TVar, t: SubstitutableA) => boolean
 //#endregion
 
 // ----------------------------------------------------------------------------
-// -- Lost + Found
-// ----------------------------------------------------------------------------
-
-//#region Misc
-let ret = (i: Infer<StateM>, v: StateM): Infer<StateM> => {
-    return new Infer<StateM>(i.env, v, i.inferState)
-}
-
-function tryExpr(i: Infer<StateM>, expr: Expr, env: TypeEnv): Infer<StateM> {
-    try {
-        return infer(i, expr)
-    } catch (err) {
-        if (matchExhaustive(<TypeError>err, {
-            Ambiguous: () => true,
-            InfiniteType: () => true,
-            UnificationFail: () => true,
-            UnificationMismatch: () => true,
-            UnBoundVariable: () => true,
-        })) console.error(err)
-        else throw err
-    }
-    return i
-}
-//#endregion
-
-// ----------------------------------------------------------------------------
 // -- Pretty Printer
 // ----------------------------------------------------------------------------
 
 //#region ppr
 
 let ppr: (t: Type | Scheme | Expr) => string
-    = t => {
-        if (TCon.is(t))
-            return t.value
-        
-        if (TVar.is(t))
-            return t.value
-
-        if (TArr.is(t))
-            return `${ppr(t.value[0])} -> ${ppr(t.value[1])}`
-
-        if (ForAll.is(t)) {
-            if (t.value[0].length === 0)
-                return ppr(t.value[1])
-            return `forall ${t.value[0].map(ppr).join(' ')}. ${ppr(t.value[1])}`
-        }
-                
-        if (App.is(t))
-            return `(${ppr(t.value[0])} ${ppr(t.value[1])})`
-                
-        if (Var.is(t))
-            return t.value
-                
-        if (LInt.is(t))
-            return String(t.value)
-                
-        if (Lam.is(t))
-            return String(t.value)
-                
-        if (Let.is(t))
-            return String(t.value)
-                
-        if (If.is(t))
-            return String(t.value)
-                
-        if (Fix.is(t))
-            return String(t.value)
-
-        if (Op.is(t))
-            return String(t.value)
-
-        if (LBool.is(t))
-            return String(t.value)
-
-        return UNREACHABLE(t, 'unreachable: ppr')
-    }
+    = t => t && matchExhaustive(t, {
+        TCon: x => x,
+        TVar: x => x,
+        TArr: ([a, b]) => `${ppr(a)} -> ${ppr(b)}`,
+        ForAll: ([a, b]) => {
+            if (a.length === 0) return ppr(b)
+            return `forall ${a.map(ppr).join(' ')}. ${ppr(b)}`
+        },
+        App: ([a, b]) => `(${ppr(a)} ${ppr(b)})`,
+        Var: x => x,
+        Lam: x => String(x),
+        Let: x => String(x),
+        If: x => String(x),
+        Fix: x => String(x),
+        Op: x => String(x),
+        LBool: x => String(x),
+        LInt: x => String(x),
+    })
 
 let ppscheme: (a: Scheme) => string
     = (a) => ppr(a)
@@ -483,9 +455,10 @@ let builtins: [string, Type | Scheme][] = [
     ['zero', TArr([typeInt, typeBool])],
     ['pred', TArr([typeInt, typeInt])],
     ['times', TArr([typeInt, TArr([typeInt, typeInt])])],
+    ['add', TArr([TVar('a'), TVar('a')])],
 ];
 
-let initenv = () => TypeEnv(new Map<Name, Scheme>());
+let initenv = () => TypeEnv(Map<Name, Scheme>());
 
 let env = builtins.reduce(extend, initenv())
 
@@ -494,31 +467,49 @@ type Binding = [string, Expr]
 let decl: (ex: Expr, n?: string) => Binding
     = (ex, name) => [name ?? 'it', ex]
 
-let i = new Infer<StateM>(env)
-
 let sig
 
-let tyCtx = inferTop(i, env, [
-    decl(LInt(5)),
-])
+try {
 
-sig = ppsignature('it', tyCtx.value.get('it')!)
-sig
-sig = ppsignature('5', ForAll([[], typeInt]))
-sig
-sig = ppsignature('true', ForAll([[], typeBool]))
-sig
-sig = ppsignature('zero', tyCtx.value.get('zero')!)
-sig
-sig = ppsignature('pred', tyCtx.value.get('pred')!)
-sig
-sig = ppsignature('times', tyCtx.value.get('times')!)
-sig
+    let tyCtx = inferTop(env, [
+        // decl(Let(['id', Lam(['a', Var('a')]), App([LInt(5), LInt(5)])])),
+        // decl(LInt(5)),
+        // decl(App([Var('add'), LInt(5)])),
+    ])
 
-tyCtx = inferTop(i, env, [
-    decl(Var("true")),
-])
+    sig = ppsignature('it', tyCtx.value.get('it')!)
+    sig
+    sig = ppsignature('5', ForAll([[], typeInt]))
+    sig
+    sig = ppsignature('true', ForAll([[], typeBool]))
+    sig
+    sig = ppsignature('zero', tyCtx.value.get('zero')!)
+    sig
+    sig = ppsignature('pred', tyCtx.value.get('pred')!)
+    sig
+    sig = ppsignature('times', tyCtx.value.get('times')!)
+    sig
 
-sig = ppsignature('it', tyCtx.value.get('it')!)
-sig
+    tyCtx = inferTop(env, [
+        decl(Var("true")),
+    ])
+
+    sig = ppsignature('it', tyCtx.value.get('it')!)
+    sig
+
+    sig = ppsignature('id', tyCtx.value.get('id')!)
+    sig
+
+    sig = ppsignature('add', tyCtx.value.get('add')!)
+    sig
+
+} catch (err) {
+    err
+    let val = err.value
+    val
+    console.log(err.value)
+    console.log(err.stack)
+    console.log(ppr(err.value))
+}
+
 //#endregion

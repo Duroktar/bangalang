@@ -1,5 +1,5 @@
-import * as Ast from "./Ast";
-import { UNREACHABLE } from "./lib/utils";
+import * as Ast from "../Ast";
+import { UNREACHABLE } from "../lib/utils";
 import type { Reader } from "./Reader";
 
 export class LexerError {
@@ -27,13 +27,17 @@ export enum TokenKind {
     SLASH = 'slash',
     EQUAL = 'equal',
     COMMA = "comma",
+    ARROW = "arrow",
 
     // keywords
     TRUE = 'true',
     FALSE = 'false',
     LET = 'let',
     FUNC = 'func',
+    CASE = 'case',
     RETURN = 'return',
+    CLASS = 'class',
+    TYPE = 'type',
 
     // -- temporary
     PRINT = 'print',
@@ -42,14 +46,18 @@ export enum TokenKind {
     EOF = '<EOF>',
 }
 
-export const KeywordTypes = [
-    TokenKind.TRUE,
-    TokenKind.FALSE,
-    TokenKind.LET,
-    TokenKind.FUNC,
-    TokenKind.RETURN,
-    TokenKind.PRINT,
-] as const
+const keywordTypeMap = {
+    'true': TokenKind.TRUE,
+    'false': TokenKind.FALSE,
+    'let': TokenKind.LET,
+    'func': TokenKind.FUNC,
+    'case': TokenKind.CASE,
+    'class': TokenKind.CLASS,
+    'type': TokenKind.TYPE,
+    'return': TokenKind.RETURN,
+} as const;
+
+export const KeywordTypes = Object.values(keywordTypeMap)
 
 export type KeywordType = typeof KeywordTypes[number]
 
@@ -59,6 +67,10 @@ export type IdentifierToken = TokenOf<TokenKind.IDENTIFIER>
 export type TrueToken = TokenOf<TokenKind.TRUE>
 export type FalseToken = TokenOf<TokenKind.FALSE>
 export type PrintToken = TokenOf<TokenKind.PRINT>
+export type CaseToken = TokenOf<TokenKind.CASE>
+export type ArrowToken = TokenOf<TokenKind.ARROW>
+export type ClassToken = TokenOf<TokenKind.CLASS>
+export type TypeToken = TokenOf<TokenKind.TYPE>
 
 export type LiteralToken =
     | NumberToken
@@ -108,12 +120,18 @@ export type Token = (
     | Kinded<TokenKind.SLASH>
     | Kinded<TokenKind.EQUAL>
     | Kinded<TokenKind.COMMA>
+    | Kinded<TokenKind.CLASS>
     | Kinded<TokenKind.FUNC>
+    | Kinded<TokenKind.CASE>
+    | Kinded<TokenKind.TYPE>
+    | Kinded<TokenKind.ARROW>
     | Kinded<TokenKind.LET>
     | Kinded<TokenKind.RETURN>
     | Kinded<TokenKind.PRINT>
     | Kinded<TokenKind.EOF>
 ) & LineInfo
+
+export type ObjOf<T> = { [key: string]: T | undefined }
 
 export type Kinded<T, R = {}> = { kind:T } & R
 
@@ -126,6 +144,10 @@ export interface Lexer<T> {
 
 const newWithLineInfo = <T extends Token>(expr: T, r: Range) =>
     Object.assign(expr, { lineInfo: r })
+
+export function getKeywordType(op: string) {
+    return keywordTypeMap[op as KeywordType]
+}
 
 export function getToken(expr: Ast.AstNode): Token {
     if (expr instanceof Ast.LiteralExpr) {
@@ -171,8 +193,16 @@ export function getToken(expr: Ast.AstNode): Token {
         return expr.keyword
     }
 
+    if (expr instanceof Ast.CaseExpr) {
+        return expr.token
+    }
+
     if (expr instanceof Ast.BlockStmt) {
         return getToken(expr.stmts[0])
+    }
+
+    if (expr instanceof Ast.ClassDeclaration) {
+        return getToken(expr.methods[0])
     }
 
     throw new Error('No token found for: ' + UNREACHABLE(expr))

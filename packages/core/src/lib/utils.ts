@@ -1,4 +1,4 @@
-import type { Range, TokenKind, TokenOf } from "../Lexer";
+import type { Range, TokenKind, TokenOf } from "../interface/Lexer";
 
 export const UNREACHABLE = (n: never, e?: any) => { if (e) throw e; return n; }
 
@@ -48,7 +48,7 @@ export class StringBuilder {
 export const clamp: (min: number, max: number, num: number) => number
     = (min, max, num) => Math.max(min, Math.min(max, num))
 
-export const zip = <A, B>(a:A[], b:B[]) => a.map((k, i) => [k, b[i]]);
+export const zip = <A, B>(a:A[], b:B[]): [A, B][] => a.map((k, i) => [k, b[i]]);
 
 export const is = <T>(o: unknown): o is T => o as any;
 export const isKind = <T extends TokenKind>(t: T, o: {kind: unknown}): o is TokenOf<T> => o.kind === t;

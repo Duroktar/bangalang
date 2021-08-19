@@ -18,8 +18,10 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
 	// The server is implemented in node
 	const serverModule = context.asAbsolutePath(
-		path.join('server', 'out', 'server.js')
+		path.join('dist', 'server.js')
 	);
+    console.log('serverModule ------->', serverModule);
+
 	// The debug options for the server
 	// --inspect=6009: runs the server in Node's Inspector mode so VS Code can attach to the server for debugging
 	const debugOptions = { execArgv: ['--nolazy', '--inspect=6099'] };
@@ -57,14 +59,6 @@ export function activate(context: ExtensionContext) {
 
 	// Start the client. This will also launch the server
 	client.start();
-
-	// languages.registerHoverProvider("bangalang", {
-    //     provideHover(document, position, token) {
-    //         return {
-    //             contents: ["Hover Content"],
-    //         };
-    //     },
-    // });
 }
 
 export function deactivate(): Thenable<void> | undefined {

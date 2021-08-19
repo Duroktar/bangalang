@@ -1,5 +1,5 @@
 {
-	"name": "@bangalang/language-server__server",
+	"name": "bangalang-language-server",
 	"description": "Example implementation of a language server in node.",
 	"version": "1.0.0",
 	"author": "Microsoft Corporation",
@@ -12,8 +12,12 @@
 		"url": "https://github.com/Microsoft/vscode-extension-samples"
 	},
 	"dependencies": {
+		"@bangalang/core": "file:../../core",
+		"debounce": "^1.2.1",
+		"lru-cache": "^6.0.0",
 		"vscode-languageserver": "^7.0.0",
-		"vscode-languageserver-textdocument": "^1.0.1"
+		"vscode-languageserver-textdocument": "^1.0.1",
+		"vscode": "^1.1.37"
 	},
 	"scripts": {}
 }

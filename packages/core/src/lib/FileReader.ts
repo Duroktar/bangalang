@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
-import type { Range } from "../Lexer";
-import type { Reader } from "../Reader";
+import type { Range } from "../interface/Lexer";
+import type { Reader } from "../interface/Reader";
 
 export class FileReader implements Reader {
     constructor(public srcpath: string, io = { readFileSync }) {

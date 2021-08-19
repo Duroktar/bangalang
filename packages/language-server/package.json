@@ -1,6 +1,6 @@
 {
-	"name": "@bangalang/language-server",
-	"description": "Bangalang Language Server",
+	"name": "bangalang-language-extension",
+	"description": "Bangalang Language extension",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"version": "1.0.0",
@@ -8,7 +8,7 @@
 		"type": "git",
 		"url": "https://github.com/Microsoft/vscode-extension-samples"
 	},
-	"publisher": "vscode-samples",
+	"publisher": "traBpUkciP",
 	"categories": [],
 	"keywords": [
 		"multi-root ready"
@@ -20,7 +20,7 @@
 		"onLanguage:bangalang",
 		"workspaceContains:*.bl"
 	],
-	"main": "./client/out/extension",
+	"main": "./dist/extension.js",
 	"contributes": {
 		"languages": [
 			{
@@ -66,14 +66,17 @@
 		}
 	},
 	"scripts": {
-		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -b",
-		"watch": "tsc -b -w",
+        "vscode:prepublish": "npm run compile",
+		"precompile": "rm -rf dist/",
+		"compile": "webpack --mode=production --node-env=production",
+		"build:dev": "webpack --mode=development --node-env=development",
+		"watch": "webpack --watch",
 		"postinstall": "cd client && yarn install && cd ../server && yarn install && cd ..",
-		"test": "sh ./scripts/e2e.sh"
+		"test": "sh ./scripts/e2e.sh",
+		"package": "vsce package",
+		"publish": "vsce publish"
 	},
 	"devDependencies": {
-		"@bangalang/core": "^1.0",
 		"@types/debounce": "^1.2.0",
 		"@types/mocha": "^8.2.2",
 		"@types/node": "^12.12.0",
@@ -82,6 +85,15 @@
 		"debounce": "^1.2.1",
 		"eslint": "^7.26.0",
 		"mocha": "^8.3.2",
-		"typescript": "^4.3.2"
+		"ts-loader": "^9.2.4",
+		"typescript": "^4.3.2",
+		"vsce": "^1.96.1",
+		"vscode": "^1.1.37",
+		"webpack": "^5.47.1",
+		"webpack-cli": "^4.7.2"
+	},
+	"dependencies": {
+		"lru-cache": "^6.0.0",
+		"minimatch": "^3.0.4"
 	}
 }

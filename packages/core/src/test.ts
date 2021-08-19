@@ -2,7 +2,7 @@ import { resolve as resolvePath } from "path"
 import { FileReader } from "./lib/FileReader"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
-import { tryExpr, TypeEnv, TypeLib } from "./lib/FunctionalHM"
+import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
 import { ConsoleReporter } from "./lib/SysReporter"
 
 function main(filename: string) {
@@ -11,19 +11,19 @@ function main(filename: string) {
     const reporter = new ConsoleReporter(reader, console)
 
     const tokens = new TokenLexer(reader).lex()
-    const parser = new TokenParser(tokens, reader)
-    const ast = parser.parseProgram()
+    const parser = new TokenParser(reader)
+    const ast = parser.parse(tokens)
 
     reporter.reportParserErrors(parser, process.exit)
 
-    const typeEnv = new TypeEnv(TypeLib)
+    const typeEnv = new TypeEnv(GlobalTypes)
+    const typeChecker = new HindleyMilner(reader, typeEnv)
 
-    for (let node of ast) {
-        const type = tryExpr(node, typeEnv)
-        const term = node.toString()
-        console.log(type)
-        console.log(term)
-    }
+    const types = typeChecker.validate(ast)
+
+    reporter.reportTypeErrors(typeChecker, process.exit)
+
+    reporter.printFullReport(tokens, ast, types, /* result */)
 }
 
-main('/Users/duroktar/code/BangaLang/packages/core/tests/func-test.bl')
+main('/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl')

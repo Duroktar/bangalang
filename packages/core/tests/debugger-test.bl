@@ -1,0 +1,39 @@
+
+let hello = 'Hello';
+let world = 'World';
+
+print(hello, world + '!')
+
+func sayhi(personsName) {
+    print('Hello ' + personsName + '!')
+}
+
+func test() {
+    let hrm = 'Test done'
+    print(hrm)
+}
+
+test()
+
+// print(hrm)
+
+sayhi('Benny')
+
+// sayhi("Johnny")
+// sayhi(3000)
+
+
+let res = case (world) {
+    // '4' -> 5;
+    'ddf' -> '8';
+    'world' -> 'never!';
+    'hello' -> '444';
+    'Hello' -> 'Nopers';
+    'World' -> 'Matched';
+    world -> '666';
+    'morp' -> 'hat';
+    _ -> '3333';
+    // 4 -> 5;
+}
+
+print(res)

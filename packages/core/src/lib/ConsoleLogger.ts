@@ -1,4 +1,4 @@
-import type { Logger } from "../Logger"
+import type { Logger } from "../interface/Logger"
 
 export class ConsoleLogger implements Logger {
     log(...args: any[]) {

@@ -1,13 +1,13 @@
 import * as Ast from "../Ast";
-import { lineInfo, Token } from "../Lexer";
-import type { Logger } from "../Logger";
-import { Parser, ParserError } from "../Parser";
-import type { Reader } from "../Reader";
-import type { Reporter } from "../Reporter";
-import { TypeChecker, TypeCheckError, WithType } from "../Types";
+import { lineInfo, Token } from "../interface/Lexer";
+import type { Logger } from "../interface/Logger";
+import { Parser, ParserError } from "../interface/Parser";
+import type { Reader } from "../interface/Reader";
+import type { Reporter } from "../interface/Reporter";
+import { TypeChecker, TypeCheckError, WithType } from "../interface/TypeCheck";
 import { StringBuilder, underline } from "./utils";
 
-export class WebReporter implements Reporter {
+export class WebReporter implements Reporter<Token[], Ast.Program> {
     constructor(public reader: Reader, public logger: Logger) {}
 
     printObject(result: object): void {
@@ -28,7 +28,7 @@ export class WebReporter implements Reporter {
         })
     }
 
-    reportParserErrors(parser: Parser<any, any>, onError: () => void, depth = 1) {
+    reportParserErrors(parser: Parser<Token[], Ast.Program>, onError: () => void, depth = 1) {
         if (parser.errors.length > 0) {
             let max = Math.min(depth, parser.errors.length)
             for (let i = max - 1; i >= 0; i--) {
@@ -43,7 +43,7 @@ export class WebReporter implements Reporter {
         }
     }
 
-    reportTypeErrors(tc: TypeChecker, onError: () => void, depth = 1) {
+    reportTypeErrors(tc: TypeChecker<Ast.Program>, onError: () => void, depth = 1) {
         if (tc.errors.length > 0) {
             let max = Math.min(depth, tc.errors.length)
             for (let i = max - 1; i >= 0; i--) {

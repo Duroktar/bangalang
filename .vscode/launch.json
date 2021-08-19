@@ -32,6 +32,21 @@
             "protocol": "inspector",
             "internalConsoleOptions": "openOnSessionStart"
         },
+        {
+            "name": "Debug Bangalang Core (hm-test.ts)",
+            "type": "node",
+            "request": "launch",
+            "args": [
+                "${workspaceRoot}/packages/core/src/hm-test.ts"
+            ],
+            "runtimeArgs": [
+                "-r",
+                "ts-node/register"
+            ],
+            "cwd": "${workspaceRoot}/packages/core",
+            "protocol": "inspector",
+            "internalConsoleOptions": "openOnSessionStart"
+        },
 		{
 			"type": "extensionHost",
 			"request": "launch",

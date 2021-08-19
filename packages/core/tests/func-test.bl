@@ -1,6 +1,6 @@
 
-func sayhi(a) {
-    return print(a);
+func greet(greeting, recipient) {
+    return print(greeting, "there", recipient + "!");
 }
 
-sayhi(8000)('hello');
+greet('hello', 'jim', 'crow');
