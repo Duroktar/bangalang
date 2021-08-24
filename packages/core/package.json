@@ -7,6 +7,7 @@
   "scripts": {
     "cli": "./scripts/bl",
     "cli:debug": "node build/test-debugger.js",
+    "cli:test": "node build/test.js",
     "dev": "ts-node src/cli.ts",
     "test": "ts-node src/test.ts",
     "test:hm": "ts-node src/hm-test.ts",

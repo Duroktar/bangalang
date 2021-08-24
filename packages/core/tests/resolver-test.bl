@@ -1,0 +1,10 @@
+func errors() {
+    let hat = 'hat1'
+    let hat = 'hat2'
+    print(hat, hat)
+}
+
+errors()
+
+// print(1)
+// return 'err'

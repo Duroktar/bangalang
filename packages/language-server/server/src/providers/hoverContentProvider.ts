@@ -1,4 +1,4 @@
-import { Declaration, findNodeForToken, HindleyMilner, TokenKind, Typed, TypeOperator, TypeTuple } from '@bangalang/core';
+import { Declaration, findNodeForToken, HindleyMilner, findTokenAtLocation, TokenKind, Typed, TypeOperator, TypeTuple } from '@bangalang/core';
 import { HoverParams } from 'vscode-languageserver/node';
 import { SourceDiagnostics } from "../types";
 
@@ -14,26 +14,14 @@ export function hoverContentProvider(params: HoverParams, sourceData: SourceDiag
 
 	const { ast, reader, tc } = sourceData;
 
-	const tokens = sourceData.tokens
-        .filter(t =>
-            (t.lineInfo.start.line === line)
-            &&
-            ((t.lineInfo.start.col <= char) && (char <= t.lineInfo.end.col))
-        )
-        .sort((a, b) =>
-            ((char - a.lineInfo.start.col) + (a.lineInfo.end.col - char))
-            -
-            ((char - b.lineInfo.start.col) + (b.lineInfo.end.col - char))
-        );
+	const token = findTokenAtLocation(sourceData, line, char);
 
-	const token = tokens[0];
-
-    if (token &&
+    if (token && (
            token.kind === TokenKind.STRING
         || token.kind === TokenKind.NUMBER
         || token.kind === TokenKind.TRUE
         || token.kind === TokenKind.FALSE
-    ) {
+    )) {
         return [];
     }
 

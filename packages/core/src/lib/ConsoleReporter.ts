@@ -6,6 +6,7 @@ import type { Logger } from "../interface/Logger";
 import { Parser, ParserError } from "../interface/Parser";
 import type { Reader } from "../interface/Reader";
 import type { Reporter } from "../interface/Reporter";
+import { ResolutionError, Resolver } from "../interface/Resolver";
 import { TypeChecker, TypeCheckError, WithType } from "../interface/TypeCheck";
 import { StringBuilder, underline } from "./utils";
 
@@ -20,17 +21,15 @@ export class ConsoleReporter implements Reporter<Token[], Ast.Program> {
         tokens: Token[],
         ast: Ast.Program,
         types: any,
-        result?: any
     ): void {
-        this.logger.log(JSON.stringify({
+        this.printObject({
             // tokens,
             ast,
             types,
-            result,
-        }, null, 4))
+        })
     }
 
-    reportParserErrors(parser: Parser<any, any>, onError: () => void, depth = 1) {
+    reportParserErrors(parser: Parser<any, any>, onError: () => void, depth = 5) {
         if (parser.errors.length > 0) {
             let max = Math.min(depth, parser.errors.length)
             for (let i = max - 1; i >= 0; i--) {
@@ -45,7 +44,19 @@ export class ConsoleReporter implements Reporter<Token[], Ast.Program> {
         }
     }
 
-    reportTypeErrors(tc: TypeChecker<Ast.Program>, onError: () => void, depth = 1) {
+    reportResolverErrors(resolver: Resolver<any>, onError: () => void, depth = 5): void {
+        if (resolver.errors.length > 0) {
+            let max = Math.min(depth, resolver.errors.length)
+            for (let i = max - 1; i >= 0; i--) {
+                const error = resolver.errors[i]
+                console.error('[ResolverError]:', error.message)
+            }
+
+            onError()
+        }
+    }
+
+    reportTypeErrors(tc: TypeChecker<Ast.Program>, onError: () => void, depth = 5) {
         if (tc.errors.length > 0) {
             let max = Math.min(depth, tc.errors.length)
             for (let i = max - 1; i >= 0; i--) {

@@ -4,71 +4,79 @@ import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
 import { findNodeForToken } from "./lib/QueryVisitor"
 import { StdLib } from "./lib/RuntimeLibrary"
-import { ConsoleReporter } from "./lib/SysReporter"
+import { ScopeResolver } from "./lib/ScopeResolver"
+import { ConsoleReporter } from "./lib/ConsoleReporter"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
 
-function main(args: string[]) {
-    const debugMode = args
-        .slice(1, -1)
-        .some(o => ['--debug', '-D'].includes(o))
-
-    const filename = resolvePath(args[args.length - 1])
+function main(path: string) {
+    const filename = resolvePath(path)
 
     const reader = new FileReader(filename)
     const reporter = new ConsoleReporter(reader, console)
 
     const tokens = new TokenLexer(reader).lex()
     const parser = new TokenParser(reader)
+    const interpreter = new AstDebuggableInterpreter(reader, StdLib)
+    const resolver = new ScopeResolver(interpreter)
+    const typeEnv = new TypeEnv(GlobalTypes)
+    const typeChecker = new HindleyMilner(reader, typeEnv)
+
     const ast = parser.parse(tokens)
 
     reporter.reportParserErrors(parser, process.exit)
 
-    const typeEnv = new TypeEnv(GlobalTypes)
-    const typeChecker = new HindleyMilner(reader, typeEnv)
+    resolver.resolve(ast)
+
+    reporter.reportResolverErrors(resolver, process.exit)
 
     typeChecker.validate(ast)
 
     reporter.reportTypeErrors(typeChecker, process.exit)
 
-    const interpreter = new AstDebuggableInterpreter(reader, StdLib)
-
-    const breakpoint = findNodeForToken(ast, tokens[1])!
-    const breakpoint2 = findNodeForToken(ast, tokens[5])!
-
-    console.log('breakpoint:', breakpoint.toString())
-    console.log('breakpoint2:', breakpoint2.toString())
-
-    interpreter.debugService.addBreakpointOn(breakpoint)
-    interpreter.debugService.addBreakpointOn(breakpoint2)
-
-    interpreter.execute(ast)
-
     let finished = false
-    interpreter.process.events.on('complete', () => {
-        finished  = true
+
+    interpreter.process.on('complete', () => {
+        finished = true
+        console.log('finished')
     })
 
+    interpreter.process.on('breakpoint-reached', () => {
+        console.log('breakpoint-reached')
+        setTimeout(() => {
+            interpreter.debugService.continue()
+        }, 2000)
+    })
+
+    const breakpoint1 = findNodeForToken(ast, tokens[1])!
+    const breakpoint2 = findNodeForToken(ast, tokens[5])!
+
+    console.log('Breakpoint 1 set:', breakpoint1.toString())
+    console.log('Breakpoint 2 set:', breakpoint2.toString())
+
+    interpreter.debugService.addBreakpointOn(breakpoint1)
+    interpreter.debugService.addBreakpointOn(breakpoint2)
+
+    interpreter.interpret(ast)
+
     const callback = () => {
-        interpreter.debugService.continue()
         if (finished) { return }
-        setTimeout(callback, 5000)
+        setTimeout(callback)
     }
 
-    setTimeout(callback, 5)
+    setImmediate(callback)
 }
 
 try {
-    // main(process.argv)
-    // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/another-test-file.bl'])
-    // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/simple-test.bl'])
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test.bl'])
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-2.bl'])
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test-3.bl'])
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/func-test.bl'])
-    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl'])
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/another-test-file.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/simple-test.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/print-test.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/print-test-2.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/print-test-3.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/func-test.bl')
+    // main('/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl')
 
-    main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl'])
+    main('/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl')
 } catch (err) {
     console.error(err)
 }

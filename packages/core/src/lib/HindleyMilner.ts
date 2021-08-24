@@ -5,10 +5,6 @@ import { Reader } from '../interface/Reader';
 import { TypeChecker, TypeCheckError, TypeName } from '../interface/TypeCheck';
 import { format, underline, UNREACHABLE, zip } from "./utils";
 
-class UnificationFail {
-    constructor(public message: string) {}
-}
-
 export type TyVar =
     | TypeVariable
     | TypeOperator
@@ -66,10 +62,10 @@ export class TypeEnv {
     constructor(
         public map: Record<string, TyVar> = { },
     ) { }
-    get(tc: HindleyMilner, name: string, nonGenerics: Set<TyVar>, label = true) {
+    get(tc: HindleyMilner, name: string, nonGenerics: Set<TyVar>, token: Token, label = true) {
         if (name in this.map)
             return tc.fresh(this.map[name], nonGenerics, label)
-        throw '[TypeEnv]: Undefined symbol: ' + name
+        throw new TypeCheckError('Undefined symbol: ' + name, token)
     }
     extend(name: string, val: TyVar) {
         Object.assign(this.map, { [name]: val })
@@ -105,8 +101,9 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             if (err instanceof TypeCheckError) {
                 this.errors.push(err)
                 return TypeName.NEVER
+            } else {
+                throw err
             }
-            throw err
         }
     }
 
@@ -161,7 +158,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                     newNonGenerics.add(argType)
                 })
                 const resultType = analyzeRec(term.body, newEnv, newNonGenerics)
-                const argTypes = term.params.map(item => newEnv.get(this, item.value, nonGenerics))
+                const argTypes = term.params.map(item => newEnv.get(this, item.value, nonGenerics, item))
                 const funcType = FunctionType(FunctionArgs(argTypes, term.varargs), resultType)
                 env.extend(term.name.value, funcType)
                 return Object.assign(term, { type: funcType }).type
@@ -201,7 +198,8 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                             () => this.getInvalidCaseResultError(mType, resType, rType!, ifMatch), getToken(ifMatch))
                 })
                 if (rType === undefined)
-                    throw new TypeCheckError('NO DEFAULT CASE ERROR', term.token)
+                    throw this.error('NO DEFAULT CASE ERROR', term.token)
+
                 return Object.assign(term, { type: rType }).type
             }
 
@@ -246,7 +244,9 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             }
             zip(pt1.types, pt2.types).forEach(([t1, t2]) => this.unify(t1, t2, term))
         } else {
-            throw new UnificationFail(`Couldn't unify terms: ${this.typeToString(pt1)} ${this.typeToString(pt2)}`)
+            const t1 = this.typeToString(pt1)
+            const t2 = this.typeToString(pt2)
+            throw this.error(`Can't unify terms: ${t1} ${t2}`, getToken(term))
         }
     }
 
@@ -361,7 +361,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
     }
 
     getType(name: string, env: TypeEnv, nonGenerics: Set<TyVar>, token: Token): TyVar {
-        const fromEnv = env.get(this, name, nonGenerics)
+        const fromEnv = env.get(this, name, nonGenerics, token)
         if (fromEnv != undefined)
             return this.fresh(fromEnv, nonGenerics)
         throw this.error(`[getType]: Undefined symbol ${name}`, token)

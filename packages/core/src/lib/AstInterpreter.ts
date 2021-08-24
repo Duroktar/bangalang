@@ -1,63 +1,85 @@
 import type * as Ast from "../Ast";
 import { Interpreter } from "../interface/Interpreter";
-import { TokenKind, VariableToken } from "../interface/Lexer";
+import { TokenKind } from "../interface/Lexer";
 import type { Reader } from "../interface/Reader";
-import type { Visitable } from "../interface/Visitor";
 import { BangaCallable, Environment, ReturnValue, RuntimeError } from "../interface/Runtime";
-import { format, is } from "./utils";
+import type { Visitable } from "../interface/Visitor";
 import { BangaFunction, createEnvironment } from "./RuntimeLibrary";
+import { format, is } from "./utils";
 
 export class AstInterpreter implements Interpreter {
-    public globals: Environment = new Map()
-    public environment: Environment = this.globals;
+    public environment: Environment
+    public globals: Environment
 
     constructor(private reader: Reader, env: Environment) {
-        [...env.entries()]
-            .map(([key, func]) => this.environment.set(key, func))
+        this.globals = createEnvironment(env)
+        this.environment = this.globals
+    }
+
+    public interpret(instructions: Ast.Program): any {
+        try {
+            for (const line of instructions) {
+                this.execute(line)
+            }
+        } catch (err) {
+            if (err instanceof RuntimeError)
+                console.log('Runtime error:', err.message)
+            throw err
+        }
+    }
+
+    public evaluate = <T extends Visitable>(node: T): T => {
+        return node.acceptVisitor(this)
+    }
+
+    public execute = (node: Visitable): void => {
+        node.acceptVisitor(this)
+    }
+
+    public resolve = (node: Ast.AstNode, scope: number) => {
+        this.locals.set(node, scope)
+    }
+
+    public executeBlock(statements: Ast.Declaration[], environment: Environment) {
+        const previous = this.environment;
+        try {
+            this.environment = createEnvironment(environment);
+            for (const statement of statements)
+                this.execute(statement)
+        } finally {
+            this.environment = previous;
+        }
     }
 
     visitClassDeclaration(node: Ast.ClassDeclaration) {
         throw new Error("Method not implemented (visitClassDeclaration).");
     }
 
-    public execute(instructions: Ast.Program): any {
-        const rv: any[] = []
-        for (const line of instructions) {
-            rv.push(this.evaluate(line))
-        }
-        return rv
-    }
-
-    public executeBlock(statement: Ast.Declaration[], environment: Environment) {
-        const previous = this.environment;
-        try {
-            this.environment = createEnvironment(environment);
-            this.execute(statement);
-        } finally {
-            this.environment = previous;
-        }
-    }
-
     visitExpressionStmt(node: Ast.ExpressionStmt) {
-        return this.evaluate(node.expr)
+        this.evaluate(node.expr)
     }
 
     visitLetDeclaration(node: Ast.LetDeclaration) {
-        const token = <VariableToken>node.name
         const value = node.init
             ? this.evaluate(node.init)
             : undefined
-        this.environment.set(token.value, value)
+
+        this.environment.define(node.name.value, value)
     }
 
     visitVariableExpr(node: Ast.VariableExpr) {
-        return this.environment.get(node.name)
+        return this.lookUpVariable(node.name, node)
     }
 
     visitAssignExpr(node: Ast.AssignExpr) {
-        const token = <VariableToken>node.name
         const value = this.evaluate(node.value)
-        this.environment.set(token.value, value)
+
+        const distance = this.locals.get(node)
+        if (distance != null) {
+            this.environment.assignAt(distance, node.name, value)
+        } else {
+            this.globals.assign(node.name, value)
+        }
     }
 
     visitGroupingExpr(node: Ast.GroupingExpr) {
@@ -77,11 +99,11 @@ export class AstInterpreter implements Interpreter {
 
     visitFuncDeclaration(node: Ast.FuncDeclaration) {
         let func = new BangaFunction(node, this.environment)
-        this.environment.set(node.name.value, func)
+        this.environment.define(node.name.value, func)
     }
 
     visitBlockStmt(node: Ast.BlockStmt) {
-        this.executeBlock(node.stmts, this.environment)
+        this.executeBlock(node.stmts, createEnvironment(this.environment))
     }
 
     visitCallExpr(node: Ast.CallExpr): any {
@@ -143,7 +165,14 @@ export class AstInterpreter implements Interpreter {
         }
     }
 
-    public evaluate = <T extends Visitable>(node: T): T => {
-        return node.acceptVisitor(this)
+    private lookUpVariable = (name: string, expr: Ast.AstNode) => {
+        const distance = this.locals.get(expr)
+        if (distance != null) {
+            return this.environment.getAt(distance, name)
+        } else {
+            return this.globals.get(name)
+        }
     }
+
+    private locals: Map<Ast.AstNode, number> = new Map()
 }

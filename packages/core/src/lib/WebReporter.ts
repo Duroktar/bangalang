@@ -4,11 +4,15 @@ import type { Logger } from "../interface/Logger";
 import { Parser, ParserError } from "../interface/Parser";
 import type { Reader } from "../interface/Reader";
 import type { Reporter } from "../interface/Reporter";
+import { Resolver } from "../interface/Resolver";
 import { TypeChecker, TypeCheckError, WithType } from "../interface/TypeCheck";
 import { StringBuilder, underline } from "./utils";
 
 export class WebReporter implements Reporter<Token[], Ast.Program> {
     constructor(public reader: Reader, public logger: Logger) {}
+    reportResolverErrors(resolver: Resolver<any>, onError: () => void, depth?: number): void {
+        throw new Error("Method not implemented.");
+    }
 
     printObject(result: object): void {
         this.logger.log(result)
@@ -18,13 +22,11 @@ export class WebReporter implements Reporter<Token[], Ast.Program> {
         tokens: Token[],
         ast: Ast.Program,
         types: any,
-        result?: any
     ): void {
         this.logger.log({
             tokens,
             ast,
             types,
-            result,
         })
     }
 

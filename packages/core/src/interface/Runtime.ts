@@ -1,6 +1,6 @@
-import { AstNode, Expression } from "../Ast";
-import { Interpreter } from "./Interpreter";
-import { Token } from "./Lexer";
+import type { Expression } from "../Ast";
+import type { Interpreter } from "./Interpreter";
+import type { IdentifierToken, Token } from "./Lexer";
 
 export class RuntimeError {
     constructor(
@@ -15,9 +15,20 @@ export class ReturnValue {
 
 export interface BangaCallable {
     checkArity(n: number): boolean
-    call(i: Interpreter, args: AstNode[]): any
+    call(i: Interpreter, args: Expression[]): any
     toString(): string
     arity(): '...' | number
 }
 
-export type Environment = Map<string, any>
+export type Environment = {
+    assign(name: IdentifierToken, value: any): any
+    define(name: string, value: any): any
+    get(name: string): any
+    has(name: string): any
+    getAt(distance: number, name: string): any
+    assignAt(distance: number, name: IdentifierToken, value: any): any
+    clear(): any
+    entries(): IterableIterator<[string, any]>
+    values: Map<string, any>
+    enclosing?: Environment
+}

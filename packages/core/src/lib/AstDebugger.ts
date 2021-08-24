@@ -2,11 +2,11 @@ import { EventEmitter } from "events";
 import Semaphore from 'ts-semaphore';
 import * as Ast from "../Ast";
 import { Interpreter } from "../interface/Interpreter";
-import { TokenKind, VariableToken } from "../interface/Lexer";
+import { getToken, TokenKind } from "../interface/Lexer";
 import { Reader } from "../interface/Reader";
 import { BangaCallable, Environment, ReturnValue, RuntimeError } from "../interface/Runtime";
 import { Visitable } from "../interface/Visitor";
-import { AsyncBangaFunction, BangaFunction, createEnvironment } from "./RuntimeLibrary";
+import { AsyncBangaFunction, createEnvironment } from "./RuntimeLibrary";
 import { format, is } from "./utils";
 
 type Context = {
@@ -18,24 +18,52 @@ type Context = {
 const createContext: (currentNode?: Visitable, sender?: Context) => Context
     = (currentNode, sender) => ({ currentNode, returnReached: false, sender })
 
+export type ProcessEvents =
+    | 'breakpoint-reached'
+    | 'complete'
+    ;
+
 type AstProcess = {
     resume: () => void
-    pause: () => void
-    events: EventEmitter
+    pause: () => Promise<void>
+    on: (event: ProcessEvents, callback: (...args: any[]) => void) => EventEmitter
+    emit: (event: ProcessEvents, ...args: any[]) => boolean
+};
+
+type StackFrame = {
+    name: string;
+    index: number;
 };
 
 export class AstDebuggableInterpreter implements Interpreter {
 
-    public globals: Environment = new Map()
-    public environment: Environment = this.globals
-    public semaphore!: Semaphore;
-    public process!: AstProcess
+    public globals: Environment
+    public environment: Environment
+    public process: AstProcess
+    public debugService: AstDebugger
+    public context: Context
+
+    public frames: StackFrame[] = []
 
     constructor(public reader: Reader, public env: Environment) {
-        [...env.entries()]
-            .map(([key, func]) => this.environment.set(key, func))
+        this.globals = createEnvironment(env)
+        this.environment = this.globals
         this.debugService = new AstDebugger(this)
         this.context = createContext()
+        this.semaphore = new Semaphore(1)
+
+        const events = new EventEmitter({ captureRejections: true });
+
+        this.process = {
+            pause: () => this.semaphore.aquire(),
+            resume: () => this.semaphore.release(),
+            on: (event: ProcessEvents, callback: (...args: any[]) => void) =>{
+                return events.on(event, callback)
+            },
+            emit: (event: ProcessEvents, ...data: any[]) =>{
+                return events.emit(event, ...data)
+            },
+        }
     }
 
     public run = () => {
@@ -43,52 +71,54 @@ export class AstDebuggableInterpreter implements Interpreter {
     }
 
     public onTracepoint = (node: Ast.AstNode) => {
-        this.debugService.onTracepoint(node, this.context)
+        return this.debugService.onTracepoint(node, this.context)
     }
 
-    public visit = async <T extends Visitable>(node: T): Promise<T> => {
+    public async interpret(instructions: Ast.Program) {
+        try {
+            for (const line of instructions) {
+                await this.evaluate(line)
+            }
+        } catch (err) {
+            if (err instanceof RuntimeError)
+                console.log('Runtime error:', err.message)
+            throw err
+        } finally {
+            this.process.emit('complete')
+            return null
+        }
+    }
+
+    public evaluate = async <T extends Visitable>(node: T): Promise<T> => {
         const previousNode = this.context.currentNode
         this.context.currentNode = node
 
         const value = await this.semaphore
-            .use(() => node.acceptVisitor(this))
+            .use(() => {
+                this.semaphore.release()
+                return node.acceptVisitor(this)
+            })
+
+        await this.semaphore.aquire()
 
         this.context.currentNode = previousNode
         return value
     }
 
-    public async execute(program: Ast.Program): Promise<any> {
-        this.semaphore = new Semaphore(1)
-        this.context = createContext()
-        this.process = {
-            pause: () => this.semaphore.aquire(),
-            resume: () => this.semaphore.release(),
-            events: new EventEmitter({captureRejections: true}),
-        }
-        this.process.pause()
-
-        return new Promise(async (resolve, reject) => {
-            try {
-                const values: any[] = []
-                for (const node of program) {
-                    const val = await this.visit(node)
-                    values.push(val)
-                }
-                resolve(values)
-            } catch (err) {
-                resolve(null)
-            } finally {
-                this.process.events.emit('complete')
-            }
-        })
+    public execute = async (node: Visitable) => {
+        this.evaluate(node)
     }
 
-    public async executeBlock(program: Ast.Program, env: Environment) {
+    public resolve = (node: Ast.AstNode, scope: number) => {
+        this.locals.set(node, scope)
+    }
+
+    public async executeBlock(statements: Ast.Program, env: Environment) {
         const previous = this.environment;
         try {
             this.environment = createEnvironment(env);
-            for (const node of program) {
-                await this.visit(node)
+            for (const statement of statements) {
+                await this.execute(statement)
             }
         } finally {
             this.environment = previous;
@@ -100,93 +130,101 @@ export class AstDebuggableInterpreter implements Interpreter {
     }
 
     async visitExpressionStmt(node: Ast.ExpressionStmt) {
-        const val = await this.visit(node.expr)
-        this.onTracepoint(node)
-        return val
+        await this.evaluate(node.expr)
+        await this.onTracepoint(node)
     }
 
     async visitLetDeclaration(node: Ast.LetDeclaration) {
-        const token = <VariableToken>node.name
         const value = node.init
-            ? await this.visit(node.init)
+            ? await this.evaluate(node.init)
             : undefined
-        this.onTracepoint(node)
-        this.environment.set(token.value, value)
+        await this.onTracepoint(node)
+        this.environment.define(node.name.value, value)
     }
 
     async visitVariableExpr(node: Ast.VariableExpr) {
-        const val = this.environment.get(node.name)
-        this.onTracepoint(node)
+        const val = this.lookupVariable(node.name, node)
+        await this.onTracepoint(node)
         return val
     }
 
     async visitAssignExpr(node: Ast.AssignExpr) {
-        const token = <VariableToken>node.name
-        const value = await this.visit(node.value)
-        this.onTracepoint(node)
-        this.environment.set(token.value, value)
+        const value = await this.evaluate(node.value)
+
+        await this.onTracepoint(node)
+
+        const distance = this.locals.get(node)
+        if (distance != null) {
+            this.environment.assignAt(distance, node.name, value)
+        } else {
+            this.globals.assign(node.name, value)
+        }
     }
 
     async visitGroupingExpr(node: Ast.GroupingExpr) {
-        const val = await this.visit(node.expr)
-        this.onTracepoint(node)
+        const val = await this.evaluate(node.expr)
+        await this.onTracepoint(node)
         return val
     }
 
     async visitLiteralExpr(node: Ast.LiteralExpr) {
         const val = node.token.value
-        this.onTracepoint(node)
+        await this.onTracepoint(node)
         return val
     }
 
     async visitReturnStmt(node: Ast.ReturnStmt) {
         let value: Ast.Expression | null = null;
         if (node.value !== null)
-            value = await this.visit(node.value)
-        this.onTracepoint(node)
+            value = await this.evaluate(node.value)
+        await this.onTracepoint(node)
+        this.frames.pop()
         throw new ReturnValue(value)
     }
 
     async visitFuncDeclaration(node: Ast.FuncDeclaration) {
-        const func = new BangaFunction(node, this.environment)
-        this.onTracepoint(node)
-        this.environment.set(node.name.value, func)
+        const func = new AsyncBangaFunction(node, this.environment)
+        await this.onTracepoint(node)
+        this.environment.define(node.name.value, func)
     }
 
     async visitBlockStmt(node: Ast.BlockStmt) {
         this.executeBlock(node.stmts, this.environment)
-        this.onTracepoint(node)
+        await this.onTracepoint(node)
     }
 
     async visitCallExpr(node: Ast.CallExpr): Promise<any> {
-        let callee = await this.visit(node.callee);
+        let callee = await this.evaluate(node.callee)
         if (!(is<BangaCallable>(callee))) {
-            throw new RuntimeError(node.paren, "called non-function");
+            throw new RuntimeError(node.paren, "called non-function")
         }
-
-        const args: Ast.Expression[] = [];
+        const args: Ast.Expression[] = []
         for (let arg of node.args) {
-            args.push(await this.visit(arg))
+            args.push(await this.evaluate(arg))
         }
         if (!callee.checkArity(args.length)) {
-            const msg = "Expected {0} arguments but got {1}.";
-            const err = format(msg, callee.arity(), args.length);
-            throw new RuntimeError(node.paren, err);
+            const msg = "Expected {0} arguments but got {1}."
+            const err = format(msg, callee.arity(), args.length)
+            throw new RuntimeError(node.paren, err)
         }
 
-        const func = (callee instanceof BangaFunction)
-            ? AsyncBangaFunction.from(callee)
-            : callee
+        this.frames.push({
+            name: callee.toString(),
+            index: this.frames.length,
+        })
 
-        const val = await func.call(this, args);
-        this.onTracepoint(node)
-        return val
+        await this.onTracepoint(node)
+
+        const rv =  await callee.call(this, args)
+
+        this.frames.pop()
+        return rv
     }
 
     async visitBinaryExpr(node: Ast.BinaryExpr) {
-        const left = await this.visit(node.left)
-        const right = await this.visit(node.right)
-        this.onTracepoint(node)
+        const left = await this.evaluate(node.left)
+        const right = await this.evaluate(node.right)
+        await this.onTracepoint(node)
         switch (node.op.kind) {
             case TokenKind.PLUS:
                 return <any>left + <any>right
@@ -197,14 +235,14 @@ export class AstDebuggableInterpreter implements Interpreter {
 
     async visitCaseExpr(node: Ast.CaseExpr) {
         const { expr, cases } = node
-        const rv = await this.visit(expr)
+        const rv = await this.evaluate(expr)
         let res;
         for (const c of cases) {
             res = await this.patternMatch(rv, c)
             if (res !== undefined)
                 break
         }
-        this.onTracepoint(node)
+        await this.onTracepoint(node)
         return res
     }
 
@@ -213,11 +251,11 @@ export class AstDebuggableInterpreter implements Interpreter {
         switch (matcher.kind) {
             case 'VariableExpr':
                 if (matcher.token.value === '_')
-                    return await this.visit(ifMatch)
+                    return await this.evaluate(ifMatch)
             case 'LiteralExpr': {
-                const evald = await this.visit(matcher);
+                const evald = await this.evaluate(matcher);
                 if (toMatch === evald)
-                    return await this.visit(ifMatch)
+                    return await this.evaluate(ifMatch)
                 break;
             }
             case 'GroupingExpr': {
@@ -227,8 +265,17 @@ export class AstDebuggableInterpreter implements Interpreter {
         }
     }
 
-    public debugService: AstDebugger
-    public context: Context
+    private lookupVariable = (name: string, expr: Ast.AstNode) => {
+        const distance = this.locals.get(expr)
+        if (distance != null) {
+            return this.environment.getAt(distance, name)
+        } else {
+            return this.globals.get(name)
+        }
+    }
+
+    private locals: Map<Ast.AstNode, number> = new Map()
+    private semaphore: Semaphore
 }
 
 abstract class DebuggerMode {
@@ -244,7 +291,7 @@ abstract class DebuggerMode {
 class ContinueMode extends DebuggerMode {
     onTracepoint(node: Ast.AstNode) {
         if (this.debugger.isBreakpoint(node))
-            this.debugger.tracepointReachedFor(node)
+            return this.debugger.tracepointReachedFor(node)
     }
     public stepOver = () => this.debugger.setMode('step-over')
     public stepInto = () => this.debugger.setMode('step-into')
@@ -252,7 +299,7 @@ class ContinueMode extends DebuggerMode {
 }
 class StepIntoMode extends DebuggerMode {
     onTracepoint(node: Ast.AstNode) {
-        this.debugger.tracepointReachedFor(node)
+        return this.debugger.tracepointReachedFor(node)
     }
     public stepOver = () => this.debugger.setMode('step-over')
     public stepInto = () => this.debugger.runInterpreter()
@@ -263,9 +310,9 @@ class StepOverMode extends DebuggerMode {
         super(_debugger)
         this.context = context
     }
-    onTracepoint(node: Ast.AstNode): void{
+    onTracepoint(node: Ast.AstNode) {
         if (this.context === this.debugger.context)
-            this.debugger.tracepointReachedFor(node)
+            return this.debugger.tracepointReachedFor(node)
     }
     public stepOver = () => this.debugger.runInterpreter()
     public stepInto = () => this.debugger.setMode('step-into')
@@ -278,14 +325,14 @@ export class AstDebugger {
     constructor(public interpreter: AstDebuggableInterpreter) {
         this.mode = new ContinueMode(this)
     }
-    public breakpoints: Set<any> = new Set()
+    public breakpoints: Set<Ast.AstNode> = new Set()
     public mode: DebuggerMode
     public context: Context = createContext()
     public stepOver = () => this.mode.stepOver()
     public stepInto = () => this.mode.stepInto()
     public continue = () => this.mode.continue()
     public onTracepoint = (node: Ast.AstNode, ctx?: unknown) => {
-        this.mode.onTracepoint(node, ctx)
+        return this.mode.onTracepoint(node, ctx)
     }
     public runInterpreter = () => {
         this.interpreter.run()
@@ -293,9 +340,12 @@ export class AstDebugger {
     public addBreakpointOn = (node: Ast.AstNode) => {
         this.breakpoints.add(node)
     }
-    public tracepointReachedFor = (node: Ast.AstNode) => {
-        console.log('Tracepoint reached:', node.toString())
-        this.interpreter.process.pause()
+    public tracepointReachedFor = async (node: Ast.AstNode) => {
+        this.interpreter.process.emit(
+            'breakpoint-reached',
+            getToken(node).lineInfo.start.line,
+        )
+        await this.interpreter.process.pause()
     }
     public isBreakpoint = (node: Ast.AstNode) => {
         return this.breakpoints.has(node)

@@ -2,6 +2,7 @@ import * as Ast from "../Ast";
 import { Token, TokenKind } from "../interface/Lexer";
 import { Visitor } from "../interface/Visitor";
 import { Typed } from "../interface/TypeCheck";
+import { findTokenAtLocation } from "./utils";
 
 type QueryData = Ast.Program | Ast.Statement | Ast.Expression;
 
@@ -233,6 +234,18 @@ class QuerySelectorAllVisitor implements Visitor {
 
     private _selectors: string[];
     private _selected: (Ast.AstNode | Token)[] = [];
+}
+
+export function getFirstNodeAtLine(sourceData: { tokens: Token[], ast: QueryData }, line: number): Ast.AstNode | null {
+    const token = sourceData.tokens.find(o => o.lineInfo.start.line === line)
+    if (token === undefined) { return null; }
+    return findNodeForToken(sourceData.ast, token);
+}
+
+export function findNodeAtLocation(sourceData: { tokens: Token[], ast: QueryData }, line: number, char: number): Ast.AstNode | null {
+    const token = findTokenAtLocation(sourceData, line, char);
+    if (token === null) { return null; }
+    return findNodeForToken(sourceData.ast, token);
 }
 
 export function findNodeForToken(program: QueryData, token: Token) {

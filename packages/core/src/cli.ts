@@ -1,13 +1,14 @@
 import { resolve as resolvePath } from "path"
 import { Program } from "./Ast"
-import { bootstrap } from "./container"
+import { bootstrap } from "./bootstrap"
 import { Token } from "./interface/Lexer"
 import { AstInterpreter } from "./lib/AstInterpreter"
 import { ConsoleLogger } from "./lib/ConsoleLogger"
 import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
+import { ScopeResolver } from "./lib/ScopeResolver"
 import { StdLib } from "./lib/RuntimeLibrary"
-import { ConsoleReporter } from "./lib/SysReporter"
+import { ConsoleReporter } from "./lib/ConsoleReporter"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
 
@@ -28,6 +29,7 @@ function main(args: string[]) {
         parser: (r)      => new TokenParser(r),
         typechecker: (r) => new HindleyMilner(r, typeEnv),
         interpreter: (r) => new AstInterpreter(r, StdLib),
+        resolver: (i)    => new ScopeResolver(i),
     })(debugMode)
 }
 

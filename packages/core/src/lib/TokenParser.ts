@@ -148,7 +148,6 @@ export class TokenParser implements Parser<Token[], object[]> {
                 const err = `\n${src}\n${arrows}\n${msg}`
                 throw new ParserError(err, equals)
             }
-            // this.consume(TokenKind.SEMI, "Expected ';' after assignment.")
             this.munchSemicolon()
             return new Ast.AssignExpr(expr.token, value)
         }

@@ -1,4 +1,4 @@
-import type { Range, TokenKind, TokenOf } from "../interface/Lexer";
+import type { Range, Token, TokenKind, TokenOf } from "../interface/Lexer";
 
 export const UNREACHABLE = (n: never, e?: any) => { if (e) throw e; return n; }
 
@@ -52,3 +52,18 @@ export const zip = <A, B>(a:A[], b:B[]): [A, B][] => a.map((k, i) => [k, b[i]]);
 
 export const is = <T>(o: unknown): o is T => o as any;
 export const isKind = <T extends TokenKind>(t: T, o: {kind: unknown}): o is TokenOf<T> => o.kind === t;
+
+export function findTokenAtLocation(sourceData: { tokens: Token[] }, line: number, char: number): Token | null {
+    const tokens = sourceData.tokens
+        .filter(t => (t.lineInfo.start.line === line)
+            &&
+            ((t.lineInfo.start.col <= char) && (char <= t.lineInfo.end.col))
+        )
+        .sort((a, b) => ((char - a.lineInfo.start.col) + (a.lineInfo.end.col - char))
+            -
+            ((char - b.lineInfo.start.col) + (b.lineInfo.end.col - char))
+        );
+
+    const token = tokens[0];
+    return token ?? null;
+}
