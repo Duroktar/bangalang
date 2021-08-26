@@ -1,0 +1,13 @@
+
+func greet() {
+    let rv = if (1) {
+        // 9;
+        'bat'
+    } else {
+        'hat'
+    }
+    return rv
+}
+
+let res = greet()
+print(res)

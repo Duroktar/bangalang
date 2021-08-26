@@ -7,7 +7,7 @@ import { ConsoleLogger } from "./lib/ConsoleLogger"
 import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
 import { ScopeResolver } from "./lib/ScopeResolver"
-import { StdLib } from "./lib/RuntimeLibrary"
+import { StdLib } from "./lib/StdLib"
 import { ConsoleReporter } from "./lib/ConsoleReporter"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
@@ -28,7 +28,7 @@ function main(args: string[]) {
         lexer: (r)       => new TokenLexer(r),
         parser: (r)      => new TokenParser(r),
         typechecker: (r) => new HindleyMilner(r, typeEnv),
-        interpreter: (r) => new AstInterpreter(r, StdLib),
+        interpreter: ()  => new AstInterpreter(StdLib),
         resolver: (i)    => new ScopeResolver(i),
     })(debugMode)
 }

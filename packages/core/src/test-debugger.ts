@@ -3,25 +3,28 @@ import { AstDebuggableInterpreter } from "./lib/AstDebugger"
 import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
 import { findNodeForToken } from "./lib/QueryVisitor"
-import { StdLib } from "./lib/RuntimeLibrary"
+import { StdLib } from "./lib/StdLib"
 import { ScopeResolver } from "./lib/ScopeResolver"
 import { ConsoleReporter } from "./lib/ConsoleReporter"
 import { TokenLexer } from "./lib/TokenLexer"
 import { TokenParser } from "./lib/TokenParser"
+import { ConsoleLogger } from "./lib/ConsoleLogger"
 
 function main(path: string) {
     const filename = resolvePath(path)
 
-    const reader = new FileReader(filename)
-    const reporter = new ConsoleReporter(reader, console)
-
-    const tokens = new TokenLexer(reader).lex()
-    const parser = new TokenParser(reader)
-    const interpreter = new AstDebuggableInterpreter(reader, StdLib)
-    const resolver = new ScopeResolver(interpreter)
     const typeEnv = new TypeEnv(GlobalTypes)
-    const typeChecker = new HindleyMilner(reader, typeEnv)
 
+    const reader = new FileReader(filename)
+    const output = new ConsoleLogger()
+    const reporter = new ConsoleReporter(reader, output)
+    const lexer = new TokenLexer(reader)
+    const parser = new TokenParser(reader)
+    const typeChecker = new HindleyMilner(reader, typeEnv)
+    const interpreter = new AstDebuggableInterpreter(StdLib)
+    const resolver = new ScopeResolver(interpreter)
+
+    const tokens = lexer.lex()
     const ast = parser.parse(tokens)
 
     reporter.reportParserErrors(parser, process.exit)
@@ -38,33 +41,35 @@ function main(path: string) {
 
     interpreter.process.on('complete', () => {
         finished = true
-        console.log('finished')
     })
 
     interpreter.process.on('breakpoint-reached', () => {
         console.log('breakpoint-reached')
-        setTimeout(() => {
-            interpreter.debugService.continue()
-        }, 2000)
+        interpreter.debugService.continue()
     })
 
-    const breakpoint1 = findNodeForToken(ast, tokens[1])!
-    const breakpoint2 = findNodeForToken(ast, tokens[5])!
+    const breakpoint1 = findNodeForToken(ast, tokens[1])
+    const breakpoint2 = findNodeForToken(ast, tokens[5])
 
-    console.log('Breakpoint 1 set:', breakpoint1.toString())
-    console.log('Breakpoint 2 set:', breakpoint2.toString())
+    if (breakpoint1 && breakpoint2) {
+        console.log('Breakpoint 1 set:', breakpoint1.toString())
+        console.log('Breakpoint 2 set:', breakpoint2.toString())
 
-    interpreter.debugService.addBreakpointOn(breakpoint1)
-    interpreter.debugService.addBreakpointOn(breakpoint2)
+        interpreter.debugService.addBreakpointOn(breakpoint1)
+        interpreter.debugService.addBreakpointOn(breakpoint2)
+    }
+
+    const callback = async () => {
+        if (finished) { return }
+        setTimeout(callback, 50)
+    }
 
     interpreter.interpret(ast)
 
-    const callback = () => {
-        if (finished) { return }
-        setTimeout(callback)
-    }
-
-    setImmediate(callback)
+    setTimeout(() => {
+        interpreter.debugService.continue()
+        callback()
+    })
 }
 
 try {

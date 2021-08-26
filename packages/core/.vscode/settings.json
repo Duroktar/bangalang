@@ -1,6 +1,6 @@
 {
     "files.exclude": {
-        "build": false,
+        "build": true,
         "node_modules": false
     },
 }

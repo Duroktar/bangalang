@@ -9,22 +9,15 @@ func sayhi(personsName) {
 }
 
 func test() {
-    let hrm = 'Test done'
-    print(hrm)
+    let hrm = 'Gandalf'
+    sayhi(hrm)
 }
 
 test()
 
-// print(hrm)
-
 sayhi('Benny')
 
-// sayhi("Johnny")
-// sayhi(3000)
-
-
 let res = case (world) {
-    // '4' -> 5;
     'ddf' -> '8';
     'world' -> 'never!';
     'hello' -> '444';
@@ -33,7 +26,6 @@ let res = case (world) {
     world -> '666';
     'morp' -> 'hat';
     _ -> '3333';
-    // 4 -> 5;
 }
 
 print(res)

@@ -98,7 +98,7 @@ export class ConsoleReporter implements Reporter<Token[], Ast.Program> {
     private _logParserError(error: ParserError) {
         let msg = ''
         if (error.token)
-            msg += `\n${error.message}\n${underline(error.token.lineInfo)}`
+            msg += `\n${error.message}\n${this.reader.getLineOfSource(error.token.lineInfo)}\n${underline(error.token.lineInfo)}`
         else
             msg += ` ${error.message}`
         console.error(msg)

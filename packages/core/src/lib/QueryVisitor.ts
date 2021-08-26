@@ -45,6 +45,16 @@ class QueryVisitor implements Visitor {
         }
         return null;
     }
+    visitIfExprStmt(node: Ast.IfExprStmt): any {
+        if (node.token === this.target) {
+            return node;
+        }
+        return (
+               node.cond.acceptVisitor(this)
+            ?? node.pass.acceptVisitor(this)
+            ?? node.fail?.acceptVisitor(this)
+        );
+    }
     visitVariableExpr(node: Ast.VariableExpr): any {
         if (node.token === this.target) {
             return node;
@@ -164,6 +174,14 @@ class QuerySelectorAllVisitor implements Visitor {
     visitLiteralExpr(node: Ast.LiteralExpr): any {
         if (this._selectors.includes(node.token.kind))
             this._selected.push(node);
+    }
+    visitIfExprStmt(node: Ast.IfExprStmt) {
+        if (this._selectors.includes(node.token.kind)) {
+            this._selected.push(node);
+        }
+        node.cond.acceptVisitor(this);
+        node.pass.acceptVisitor(this);
+        node.fail?.acceptVisitor(this);
     }
     visitVariableExpr(node: Ast.VariableExpr): any {
         if (this._selectors.includes(node.token.kind))

@@ -1,4 +1,4 @@
-import { AssignExpr, AstNode, BinaryExpr, BlockStmt, CallExpr, CaseExpr, ClassDeclaration, Expression, ExpressionStmt, FuncDeclaration, GroupingExpr, LetDeclaration, LiteralExpr, Program, ReturnStmt, VariableExpr } from "../Ast";
+import { AssignExpr, AstNode, BinaryExpr, BlockStmt, CallExpr, CaseExpr, ClassDeclaration, Expression, ExpressionStmt, FuncDeclaration, GroupingExpr, IfExprStmt, LetDeclaration, LiteralExpr, Program, ReturnStmt, VariableExpr } from "../Ast";
 import { Interpreter } from "../interface/Interpreter";
 import { IdentifierToken } from "../interface/Lexer";
 import { ResolutionError } from "../interface/Resolver";
@@ -40,10 +40,8 @@ export class ScopeResolver implements Visitor {
         scope.set(token.value, false)
     }
     private define = (token: IdentifierToken) => {
-        if (this.scopes.isEmpty())
-            return
-        const scope = this.scopes.peek()
-        scope.set(token.value, true)
+        if (this.scopes.isEmpty()) { return }
+        this.scopes.peek().set(token.value, true)
     }
     private resolveLocal = (expr: Expression, name: string) => {
         for (let i = this.scopes.size() - 1; i >= 0; i--) {
@@ -100,6 +98,11 @@ export class ScopeResolver implements Visitor {
         this.resolve(node.cases.map(o => o.matcher))
         this.resolve(node.expr)
     }
+    visitIfExprStmt(node: IfExprStmt) {
+        this.resolve(node.cond)
+        this.resolve(node.pass)
+        if (node.fail) this.resolve(node.fail)
+    }
     visitLiteralExpr(node: LiteralExpr) {
         return
     }
@@ -111,7 +114,7 @@ export class ScopeResolver implements Visitor {
         this.resolve(node.value)
     }
     visitVariableExpr(node: VariableExpr) {
-        if (!this.scopes.isEmpty() && this.scopes.peek().get(node.name) == false) {
+        if (!this.scopes.isEmpty() && this.scopes.peek().get(node.name) === false) {
             this.errors.push(new ResolutionError(node.token,
                 "Can't read local variable in its own initializer."))
         }

@@ -177,6 +177,9 @@ let analyze: (a: Ast.AstNode, b: TypeEnv, c?: Set<TyVar>) => TyVar
     if (term.kind === 'CaseExpr') {
         throw new Error('Not implemented: "CaseExpr" in analyzeRec')
     }
+    if (term.kind === 'IfExprStmt') {
+        throw new Error('Not implemented: "IfExpr" in analyzeRec')
+    }
     if (term.kind === 'ClassDeclaration') {
         throw new Error('Not implemented: "ClassDeclaration" in analyzeRec')
     }

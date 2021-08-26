@@ -26,6 +26,7 @@ export type Expression =
     | BinaryExpr
     | CallExpr
     | CaseExpr
+    | IfExprStmt
     | LiteralExpr
     | VariableExpr
     | GroupingExpr
@@ -244,6 +245,26 @@ export class GroupingExpr implements Visitable {
     static is = (other: AstNode): other is GroupingExpr => (other.kind === 'GroupingExpr')
 }
 
+export class IfExprStmt implements Visitable {
+    public kind = 'IfExprStmt' as const
+    constructor(
+        public cond: Expression,
+        public pass: BlockStmt,
+        public fail: BlockStmt | null = null,
+        public token: Token,
+    ) { }
+
+    acceptVisitor = (visitor: Visitor) => {
+        return visitor.visitIfExprStmt(this);
+    };
+
+    toString(): string {
+        return `if (TODO)`
+    }
+
+    static is = (other: AstNode): other is IfExprStmt => (other.kind === 'IfExprStmt')
+}
+
 export class CaseExpr implements Visitable {
     public kind = 'CaseExpr' as const
     constructor(
@@ -310,6 +331,7 @@ export function kindName(kind: Expression['kind']): string {
         case 'VariableExpr': return 'variable';
         case 'CallExpr': return 'call';
         case 'CaseExpr': return 'case';
+        case 'IfExprStmt': return 'if';
         default:
             return UNREACHABLE(kind)
     }

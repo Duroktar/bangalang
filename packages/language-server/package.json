@@ -68,6 +68,8 @@
 	"scripts": {
         "vscode:prepublish": "npm run compile",
 		"precompile": "rm -rf dist/",
+		"develop:compile": "tsc -b",
+		"develop:watch": "tsc -b -w",
 		"compile": "webpack --mode=production --node-env=production",
 		"build:dev": "webpack --mode=development --node-env=development",
 		"watch": "webpack --watch",

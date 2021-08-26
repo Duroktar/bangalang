@@ -38,6 +38,8 @@ export enum TokenKind {
     RETURN = 'return',
     CLASS = 'class',
     TYPE = 'type',
+    IF = 'if',
+    ELSE = 'else',
 
     // -- temporary
     PRINT = 'print',
@@ -54,6 +56,8 @@ const keywordTypeMap = {
     'case': TokenKind.CASE,
     'class': TokenKind.CLASS,
     'type': TokenKind.TYPE,
+    'if': TokenKind.IF,
+    'else': TokenKind.ELSE,
     'return': TokenKind.RETURN,
 } as const;
 
@@ -71,6 +75,8 @@ export type CaseToken = TokenOf<TokenKind.CASE>
 export type ArrowToken = TokenOf<TokenKind.ARROW>
 export type ClassToken = TokenOf<TokenKind.CLASS>
 export type TypeToken = TokenOf<TokenKind.TYPE>
+export type IfToken = TokenOf<TokenKind.IF>
+export type ElseToken = TokenOf<TokenKind.ELSE>
 
 export type LiteralToken =
     | NumberToken
@@ -126,6 +132,8 @@ export type Token = (
     | Kinded<TokenKind.TYPE>
     | Kinded<TokenKind.ARROW>
     | Kinded<TokenKind.LET>
+    | Kinded<TokenKind.IF>
+    | Kinded<TokenKind.ELSE>
     | Kinded<TokenKind.RETURN>
     | Kinded<TokenKind.PRINT>
     | Kinded<TokenKind.EOF>
@@ -194,6 +202,10 @@ export function getToken(expr: Ast.AstNode): Token {
     }
 
     if (expr instanceof Ast.CaseExpr) {
+        return expr.token
+    }
+
+    if (expr instanceof Ast.IfExprStmt) {
         return expr.token
     }
 

@@ -108,7 +108,6 @@ export class TokenParser implements Parser<Token[], object[]> {
     returnStatement(): Ast.ReturnStmt {
         const keyword = this.previous<TokenKind.RETURN>();
         const value = this.expression();
-        // this.consume(TokenKind.SEMI, "Expect ';' after return value.");
         this.munchSemicolon()
         return new Ast.ReturnStmt(keyword, value);
     }
@@ -126,7 +125,6 @@ export class TokenParser implements Parser<Token[], object[]> {
 
     exprStmt() {
         const expr = this.expression()
-        // this.consume(TokenKind.SEMI, "Expected ';' after expression.")
         this.munchSemicolon()
         return new Ast.ExpressionStmt(expr, getToken(expr))
     }
@@ -136,7 +134,7 @@ export class TokenParser implements Parser<Token[], object[]> {
     }
 
     assignment(): Ast.Expression {
-        const expr = this.case()
+        const expr = this.ifExpr()
         if (this.match(TokenKind.EQUAL)) {
             const equals = this.previous()
             const value = this.assignment()
@@ -152,6 +150,27 @@ export class TokenParser implements Parser<Token[], object[]> {
             return new Ast.AssignExpr(expr.token, value)
         }
         return expr
+    }
+
+    ifExpr() {
+        if (this.match(TokenKind.IF)) {
+            const token = this.previous()
+            this.consume(TokenKind.LEFT_PAREN, "Expected '(' before if cond.")
+            const cond = this.tryWithErrMsg(() => this.expression(), 'Expected expression as condition.')
+            this.consume(TokenKind.RIGHT_PAREN, "Expected ')' after if cond.")
+            this.consume(TokenKind.LEFT_BRACE, "Expected '{' before pass block.")
+            const pass = this.tryWithErrMsg(() => new BlockStmt(this.block()), 'Expected block for pass case.')
+            this.munchSemicolon()
+            let fail: Ast.BlockStmt | null = null
+            if (this.match(TokenKind.ELSE)) {
+                this.consume(TokenKind.LEFT_BRACE, "Expected '{' before fail block.")
+                fail = this.tryWithErrMsg(() => new BlockStmt(this.block()), 'Expected block for else case.')
+                this.munchSemicolon()
+            }
+            this.munchSemicolon()
+            return new Ast.IfExprStmt(cond, pass, fail, token)
+        }
+        return this.case()
     }
 
     case(): Ast.Expression {
@@ -212,7 +231,7 @@ export class TokenParser implements Parser<Token[], object[]> {
         return expr;
     }
 
-    private tryWithErrMsg = (fn: Function, err: string) => {
+    private tryWithErrMsg = <R>(fn: () => R, err: string) => {
         try {
             return fn()
         } catch (e) {

@@ -1,19 +1,19 @@
 import type * as Ast from "../Ast";
 import { Interpreter } from "../interface/Interpreter";
-import { TokenKind } from "../interface/Lexer";
-import type { Reader } from "../interface/Reader";
+import { getToken, TokenKind } from "../interface/Lexer";
 import { BangaCallable, Environment, ReturnValue, RuntimeError } from "../interface/Runtime";
 import type { Visitable } from "../interface/Visitor";
-import { BangaFunction, createEnvironment } from "./RuntimeLibrary";
+import { createEnvironment } from "./Environment";
+import { BangaFunction } from "./RuntimeLibrary";
 import { format, is } from "./utils";
 
 export class AstInterpreter implements Interpreter {
     public environment: Environment
     public globals: Environment
 
-    constructor(private reader: Reader, env: Environment) {
-        this.globals = createEnvironment(env)
-        this.environment = this.globals
+    constructor(_globals: Environment) {
+        this.environment = _globals
+        this.globals = _globals
     }
 
     public interpret(instructions: Ast.Program): any {
@@ -33,17 +33,17 @@ export class AstInterpreter implements Interpreter {
     }
 
     public execute = (node: Visitable): void => {
-        node.acceptVisitor(this)
+        this.evaluate(node)
     }
 
     public resolve = (node: Ast.AstNode, scope: number) => {
         this.locals.set(node, scope)
     }
 
-    public executeBlock(statements: Ast.Declaration[], environment: Environment) {
+    public executeBlock = (statements: Ast.Declaration[], environment: Environment) => {
         const previous = this.environment;
         try {
-            this.environment = createEnvironment(environment);
+            this.environment = environment;
             for (const statement of statements)
                 this.execute(statement)
         } finally {
@@ -51,12 +51,28 @@ export class AstInterpreter implements Interpreter {
         }
     }
 
+    public evaluateBlock = (block: Ast.BlockStmt, environment: Environment) => {
+        const previous = this.environment;
+        let result: Ast.Declaration | undefined = undefined;
+        try {
+            this.environment = environment;
+            for (const statement of block.stmts)
+                result = this.evaluate(statement)
+        } finally {
+            this.environment = previous;
+        }
+        if (result === undefined) {
+            throw new RuntimeError(getToken(block), 'Block Expression must end in expression.')
+        }
+        return result
+    }
+
     visitClassDeclaration(node: Ast.ClassDeclaration) {
         throw new Error("Method not implemented (visitClassDeclaration).");
     }
 
     visitExpressionStmt(node: Ast.ExpressionStmt) {
-        this.evaluate(node.expr)
+        return this.evaluate(node.expr)
     }
 
     visitLetDeclaration(node: Ast.LetDeclaration) {
@@ -86,6 +102,14 @@ export class AstInterpreter implements Interpreter {
         return this.evaluate(node.expr)
     }
 
+    visitIfExprStmt(node: Ast.IfExprStmt) {
+        const cond = this.evaluate(node.cond)
+        if (!!cond)
+            return this.evaluateBlock(node.pass, this.environment)
+        else if (node.fail)
+            return this.evaluateBlock(node.fail, this.environment)
+    }
+
     visitLiteralExpr(node: Ast.LiteralExpr) {
         return node.token.value
     }
@@ -98,7 +122,7 @@ export class AstInterpreter implements Interpreter {
     }
 
     visitFuncDeclaration(node: Ast.FuncDeclaration) {
-        let func = new BangaFunction(node, this.environment)
+        const func = new BangaFunction(node, this.environment)
         this.environment.define(node.name.value, func)
     }
 
@@ -159,7 +183,7 @@ export class AstInterpreter implements Interpreter {
                 break;
             }
             case 'GroupingExpr': {
-                console.log('Not implemented: "GroupingExpr"')
+                // console.log('Not implemented: "GroupingExpr"')
                 throw new Error('Not implemented: "GroupingExpr"')
             }
         }

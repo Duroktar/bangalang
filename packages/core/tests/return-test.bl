@@ -1,0 +1,7 @@
+
+func greet() {
+    return 9;
+    // return 'hat';
+}
+
+greet()

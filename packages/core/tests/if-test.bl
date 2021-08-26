@@ -1,0 +1,18 @@
+
+func greet() {
+    let rv = if (5 + 5) {
+        1 + 8
+        'bat'
+    } else {
+        2 + 8
+        'hat'
+    }
+    return rv
+}
+
+let res = greet()
+print(res) // prints 'bat'
+
+// func clap(p) {
+
+// }

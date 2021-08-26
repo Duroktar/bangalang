@@ -20,6 +20,28 @@
             ],
             "group": "build",
             "label": "tsc: watch - language-server"
+        },
+        {
+            "type": "typescript",
+            "tsconfig": "packages/vscode-debugger/tsconfig.json",
+            "option": "watch",
+            "problemMatcher": [
+                "$tsc-watch"
+            ],
+            "group": "build",
+            "label": "tsc: watch - vscode-debugger"
+        },
+        {
+            "label": "Typecheck All",
+            "dependsOn": [
+                "tsc: watch - core",
+                "tsc: watch - language-server",
+                "tsc: watch - vscode-debugger"
+            ],
+            "problemMatcher": [
+                "$tsc-watch"
+            ],
+            "isBackground": true
         }
     ]
 }

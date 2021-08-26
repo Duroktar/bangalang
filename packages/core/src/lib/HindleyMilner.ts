@@ -2,7 +2,7 @@ import type * as Ast from '../Ast';
 import { VariableExpr } from '../Ast';
 import { getToken, lineInfo, Range, Token } from '../interface/Lexer';
 import { Reader } from '../interface/Reader';
-import { TypeChecker, TypeCheckError, TypeName } from '../interface/TypeCheck';
+import { TypeChecker, TypeCheckError, Typed, TypeName } from '../interface/TypeCheck';
 import { format, underline, UNREACHABLE, zip } from "./utils";
 
 export type TyVar =
@@ -136,7 +136,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             }
             if (term.kind === 'LetDeclaration') {
                 let type = analyzeRec(term.init, env, nonGenerics)
-                env.extend(term.name.value, type)
+                env.extend(term.name.value, this.prune(type))
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'LiteralExpr') {
@@ -148,31 +148,57 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                 // return Object.assign(term, { type }).type
                 return neverType
             }
+            if (term.kind === 'IfExprStmt') {
+                // TODO: assert cond type is boolean (??)
+                let cond = analyzeRec(term.cond, env, nonGenerics)
+                let pass = analyzeRec(term.pass, env, nonGenerics)
+                let fail = term.fail
+                    ? analyzeRec(term.fail, env, nonGenerics)
+                    : pass
+                this.unify(pass, fail, term)
+                Object.assign(term, { type: pass })
+                return pass
+            }
             if (term.kind === 'FuncDeclaration') {
-                const newEnv = env.copy()
+                const closure = env.copy()
                 const newNonGenerics = new Set(nonGenerics.keys())
                 term.params.forEach(t => {
-                    const argType = this.mkVariable();
+                    const argType = this.mkVariable()
                     argType.label = t.value
-                    newEnv.extend(t.value, argType)
+                    closure.extend(t.value, argType)
                     newNonGenerics.add(argType)
                 })
-                const resultType = analyzeRec(term.body, newEnv, newNonGenerics)
-                const argTypes = term.params.map(item => newEnv.get(this, item.value, nonGenerics, item))
-                const funcType = FunctionType(FunctionArgs(argTypes, term.varargs), resultType)
-                env.extend(term.name.value, funcType)
-                return Object.assign(term, { type: funcType }).type
+                const retType = this.injectReturnTyVar(closure, newNonGenerics, term)
+                const argTypes = term.params.map(item => closure.get(this, item.value, nonGenerics, item))
+                try {
+                    const resultType = analyzeRec(term.body, closure, newNonGenerics)
+                    const funcType = FunctionType(FunctionArgs(argTypes, term.varargs), resultType)
+                    env.extend(term.name.value, funcType)
+                    return Object.assign(term, { type: funcType }).type
+                } catch (err) {
+                    const funcType = FunctionType(FunctionArgs(argTypes, term.varargs), retType)
+                    env.extend(term.name.value, funcType)
+                    Object.assign(term, { type: funcType }).type
+                    throw err
+                }
             }
             if (term.kind === 'CallExpr') {
-                let funcType = analyzeRec(term.callee, env, nonGenerics);
-                let argTypes = term.args.map(arg => analyzeRec(arg, env, nonGenerics));
-                let retType = this.mkVariable();
-                this.unify(FunctionType(FunctionArgs(argTypes), retType), funcType, term);
-                Object.assign(term, { type: funcType }).type;
-                return retType;
+                let funcType = analyzeRec(term.callee, env, nonGenerics)
+                let argTypes = term.args.map(arg => analyzeRec(arg, env, nonGenerics))
+                let retType = this.mkVariable()
+                this.unify(FunctionType(FunctionArgs(argTypes), retType), funcType, term)
+                Object.assign(term, { type: retType })
+                return retType
             }
             if (term.kind === 'ReturnStmt') {
+                const retType = this.getType('return', env, nonGenerics, getToken(term))
                 const type = analyzeRec(term.value, env, nonGenerics)
+
+                this.tryWithErr(
+                    () => this.unify(type, retType, term),
+                    () => this.getReturnTypeUnificationError(type, retType, term),
+                )
+
                 return Object.assign(term, { type }).type
             }
             if (term.kind === 'BlockStmt') {
@@ -186,16 +212,26 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                 let rType: TyVar | undefined;
                 term.cases.forEach(exprCase => {
                     const { matcher, ifMatch } = exprCase
-                    const mType = VariableExpr.is(matcher) && matcher.isUnderscore()
-                        ? exprT : analyzeRec(matcher, env, nonGenerics);
+
+                    const mType = (VariableExpr.is(matcher) && matcher.isUnderscore())
+                        ? exprT
+                        : analyzeRec(matcher, env, nonGenerics);
+
                     const resType = analyzeRec(ifMatch, env, nonGenerics)
-                    this.tryWithErrMsg(() => this.unify(mType, exprT, term),
-                        () => this.getInvalidCaseOptionError(mType, exprT, rType ?? resType, matcher), matcher.token)
-                    if (rType === undefined)
+
+                    this.tryWithErrMsg(
+                        () => this.unify(mType, exprT, term),
+                        () => this.getInvalidCaseOptionError(mType, exprT, rType ?? resType, matcher),
+                        matcher.token)
+
+                    if (rType === undefined) {
                         rType = resType
-                    else
-                        this.tryWithErrMsg(() => this.unify(resType, rType!, term),
-                            () => this.getInvalidCaseResultError(mType, resType, rType!, ifMatch), getToken(ifMatch))
+                    } else {
+                        this.tryWithErrMsg(
+                            () => this.unify(resType, rType!, term),
+                            () => this.getInvalidCaseResultError(mType, resType, rType!, ifMatch),
+                            getToken(ifMatch))
+                    }
                 })
                 if (rType === undefined)
                     throw this.error('NO DEFAULT CASE ERROR', term.token)
@@ -247,94 +283,6 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             const t1 = this.typeToString(pt1)
             const t2 = this.typeToString(pt2)
             throw this.error(`Can't unify terms: ${t1} ${t2}`, getToken(term))
-        }
-    }
-
-    private getInvalidCaseOptionError(
-        mType: TyVar,
-        exprT: TyVar,
-        rType: TyVar,
-        matcher: Ast.CaseMatcher,
-    ): string {
-        const range = lineInfo(matcher)
-        const code = this.reader.getLineOfSource(range)
-        let { start: { line, col } } = range
-        return format(
-            'Invalid matcher passed to case expression: Expected: "{1}" but got "{0}"\n'
-            + '\n - expected case option type :: ({1} -> {4})'
-            + '\n - received case option type :: ({0} -> {4})\n'
-            + '\nLn {2}, Col {3}\n\t{5}\n\t{6}\n',
-            this.typeToString(mType), this.typeToString(exprT), line, col,
-            this.typeToString(rType), code, underline(range)
-        );
-    }
-
-    private getInvalidCaseResultError(
-        mType: TyVar,
-        resType: TyVar,
-        rType: TyVar,
-        ifMatch: Ast.Expression,
-    ): string {
-        const range = lineInfo(ifMatch)
-        const code = this.reader.getLineOfSource(range)
-        let { start: { line, col } } = range
-        return format(
-            'Invalid result returned from case expression: Expected: "{1}" but got "{0}"\n'
-            + '\n - expected case option type :: ({2} -> {1})'
-            + '\n - received case option type :: ({2} -> {0})\n'
-            + `\nLn ${line}, Col ${col}\n\t${code}\n\t${underline(range)}\n`,
-            this.typeToString(resType), this.typeToString(rType), this.typeToString(mType),
-        );
-    }
-
-    private getFunctionArgsUnificationError(
-        pt1: TypeTuple,
-        pt2: TypeTuple,
-        term: Ast.Expression | Ast.Statement,
-    ): TypeCheckError {
-        const range = lineInfo(term);
-        const code = this.reader.getLineOfSource(range)
-        switch(term.kind) {
-            case 'CallExpr': {
-                const argstart = lineInfo(term.args[0])
-                const argend = lineInfo(term.args[term.args.length - 1])
-                let range: Range = { start: argstart.start, end: argend.end }
-                let { start: { line, col } } = range
-                return this.error(
-                    format(
-                          'Invalid number of arguments passed to function: "{0}" -- Expected: {1} but got {2}\n'
-                        + '\n - expected arg types :: ({5})'
-                        + '\n - received arg types :: ({6})\n'
-                        + '\nLn {3}, Col {4}\n\t{7}\n\t{8}\n',
-                        term.callee.toString(), pt2.types.length, pt1.types.length, line, col,
-                        this.typeToString(pt2), this.typeToString(pt1), code, underline(range),
-                    ), getToken(term), range)
-            }
-            default: {
-                return this.error(`FunctionArgsUnificationError: t1::${this.typeToString(pt1)}, t2::${this.typeToString(pt2)}`, getToken(term));
-            }
-        }
-    }
-
-    private getTypeOperatorsUnificationError(
-        pt1: TypeOperator,
-        pt2: TypeOperator,
-        term: Ast.Expression | Ast.Statement,
-    ): TypeCheckError{
-        const { start } = lineInfo(term);
-        switch(term.kind) {
-            case 'CallExpr': {
-                const msg = "Can't assign argument of type '{0}' to parameter '{4}' of type '{1}' in function '{5}'; Ln {2}, Col {3}";
-                const args = [pt1.name, pt2.name, start.line, start.col, pt2.label ?? this.typeToString(pt2), term.callee.toString()];
-                return this.error(format(msg, ...args), getToken(term.args[0]))
-            }
-            case 'BinaryExpr':
-            case 'AssignExpr':
-            default: {
-                const msg = 'Type mismatch: {0} != {1}; Ln {2}, Col {3}';
-                const args = [pt1.name, pt2.name, start.line, start.col];
-                return this.error(format(msg, ...args), getToken(term))
-            }
         }
     }
 
@@ -409,12 +357,22 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
         return tp
     }
 
-    typeToString(t: TyVar): string {
+    private injectReturnTyVar = (env: TypeEnv, gen: Set<TyVar>, term: Ast.FuncDeclaration) => {
+        const retType = this.mkVariable()
+        retType.label = term.name.value
+        env.extend('return', retType)
+        gen.add(retType)
+        return retType
+    }
+
+    public typeToString(t: TyVar): string {
+        t = this.prune(t)
         if (t instanceof TypeVariable) {
             if (t.instance instanceof TypeVariable) {
                 return this.typeToString(t.instance)
             }
-            return this.variableName(t)
+            console.log({ t })
+            return t.name ?? this.variableName(t)
         }
         if (t instanceof TypeTuple) {
             const typenames = t.types
@@ -445,21 +403,173 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
         return UNREACHABLE(t, new Error('unreachable: typeToString -> ' + String(t)))
     }
 
-    variableName(t: TypeVariable): string {
+    private variableName(t: TypeVariable): string {
         if (t.name) return t.name
         t.name = this._next_unique_name;
         this._next_unique_name = this.mkVariableName()
         return t.name
     }
 
+    public nodeTypeToString = (node: Typed<Ast.Declaration>) => {
+        switch (node.kind) {
+            case 'FuncDeclaration': {
+                const type = <TypeOperator>node.type;
+                const args = node.varargs
+                    ? this.typeToString(type.types[0])
+                    : (type.types[0] as TypeTuple).types
+                        .map(o => o.label ? `${o.label}: ${this.typeToString(o)}` : this.typeToString(o))
+                        .join(', ');
+
+                const returnType = this.typeToString(type.types[1]);
+
+                return `func ${node.name.value}(${args}): ${returnType}`;
+            }
+            case 'ReturnStmt':
+                return '';
+            case 'CallExpr':
+                return `${node.toString()}: ${this.typeToString(node.type)}`;
+            case 'LetDeclaration':
+                return `let ${node.name.value}: ${this.typeToString(node.type)}`;
+            case 'CaseExpr':
+                return `case (${this.typeToString((<Typed<Ast.Declaration>>node.expr).type)}) -> ${this.typeToString(node.type)}`;
+            default:
+                return `${node.toString()}: ${this.typeToString(node.type)}`;
+        }
+    }
+
+    private tryWithErr = (fn: Function, getErr: () => TypeCheckError) => {
+        try {
+            return fn()
+        } catch (e: any) {
+            const err: any = getErr()
+            err.__message = e?.message
+            throw err
+        }
+    }
+
     private tryWithErrMsg = (fn: Function, getErr: () => string, token: Token) => {
         try {
             return fn()
-        } catch (e) {
+        } catch (e: any) {
             e.__message = e.message
             e.message = getErr()
             e.token = token
             throw e
+        }
+    }
+
+    private getInvalidCaseOptionError(
+        mType: TyVar,
+        exprT: TyVar,
+        rType: TyVar,
+        matcher: Ast.CaseMatcher,
+    ): string {
+        const range = lineInfo(matcher)
+        const code = this.reader.getLineOfSource(range)
+        let { start: { line, col } } = range
+        return format(
+            'Invalid matcher passed to case expression: Expected: "{1}" but got "{0}"\n'
+            + '\n - expected case option type :: ({1} -> {4})'
+            + '\n - received case option type :: ({0} -> {4})\n'
+            + '\nLn {2}, Col {3}\n\t{5}\n\t{6}\n',
+            this.typeToString(mType), this.typeToString(exprT), line, col,
+            this.typeToString(rType), code, underline(range)
+        );
+    }
+
+    private getInvalidCaseResultError(
+        mType: TyVar,
+        resType: TyVar,
+        rType: TyVar,
+        ifMatch: Ast.Expression,
+    ): string {
+        const range = lineInfo(ifMatch)
+        const code = this.reader.getLineOfSource(range)
+        let { start: { line, col } } = range
+        return format(
+            'Invalid result returned from case expression: Expected: "{1}" but got "{0}"\n'
+            + '\n - expected case option type :: ({2} -> {1})'
+            + '\n - received case option type :: ({2} -> {0})\n'
+            + `\nLn ${line}, Col ${col}\n\t${code}\n\t${underline(range)}\n`,
+            this.typeToString(resType), this.typeToString(rType), this.typeToString(mType),
+        );
+    }
+
+    private getFunctionArgsUnificationError(
+        pt1: TypeTuple,
+        pt2: TypeTuple,
+        term: Ast.Expression | Ast.Statement,
+    ): TypeCheckError {
+        const range = lineInfo(term);
+        const code = this.reader.getLineOfSource(range)
+        switch(term.kind) {
+            case 'CallExpr': {
+                const argstart = lineInfo(term.args[0])
+                const argend = lineInfo(term.args[term.args.length - 1])
+                let range: Range = { start: argstart.start, end: argend.end }
+                let { start: { line, col } } = range
+                return this.error(
+                    format(
+                          'Invalid number of arguments passed to function: "{0}" -- Expected: {1} but got {2}\n'
+                        + '\n - expected arg types :: {5}'
+                        + '\n - received arg types :: {6}\n'
+                        + '\nLn {3}, Col {4}\n\t{7}\n\t{8}\n',
+                        term.callee.toString(), pt2.types.length, pt1.types.length, line, col,
+                        this.typeToString(pt2), this.typeToString(pt1), code, underline(range),
+                    ), getToken(term), range)
+            }
+            default: {
+                return this.error(`FunctionArgsUnificationError: t1::${this.typeToString(pt1)}, t2::${this.typeToString(pt2)}`, getToken(term));
+            }
+        }
+    }
+
+    private getReturnTypeUnificationError(
+        type: TyVar,
+        retType: TyVar,
+        term: Ast.Expression | Ast.Statement,
+    ): TypeCheckError {
+        const range = lineInfo(term);
+        const code = this.reader.getLineOfSource(range)
+        switch(term.kind) {
+            case 'ReturnStmt': {
+                const range = lineInfo(term.value)
+                const { start: { line, col } } = range
+                return this.error(
+                    format(
+                          'Invalid return type from function: "{0}" -- Expected: "{1}" but got "{2}"\n'
+                        + '\n - expected return type :: {5}'
+                        + '\n - received return type :: {6}\n'
+                        + '\nLn {3}, Col {4} -\n\n{7}\n{8}\n',
+                        retType.label, this.typeToString(retType), this.typeToString(type), line, col,
+                        this.typeToString(retType), this.typeToString(type), code, underline(range),
+                    ), getToken(term), range)
+            }
+            default: {
+                return this.error(`ReturnTypeUnificationError: t1::${this.typeToString(type)}, t2::${this.typeToString(retType)}`, getToken(term));
+            }
+        }
+    }
+
+    private getTypeOperatorsUnificationError(
+        pt1: TypeOperator,
+        pt2: TypeOperator,
+        term: Ast.Expression | Ast.Statement,
+    ): TypeCheckError{
+        const { start } = lineInfo(term);
+        switch(term.kind) {
+            case 'CallExpr': {
+                const msg = "Can't assign argument of type '{0}' to parameter '{4}' of type '{1}' in function '{5}'; Ln {2}, Col {3}";
+                const args = [pt1.name, pt2.name, start.line, start.col, pt2.label ?? this.typeToString(pt2), term.callee.toString()];
+                return this.error(format(msg, ...args), getToken(term.args[0]))
+            }
+            case 'BinaryExpr':
+            case 'AssignExpr':
+            default: {
+                const msg = 'Type mismatch: {0} != {1}; Ln {2}, Col {3}';
+                const args = [pt1.name, pt2.name, start.line, start.col];
+                return this.error(format(msg, ...args), getToken(term))
+            }
         }
     }
 

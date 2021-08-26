@@ -1,10 +1,11 @@
-import { Declaration, FuncDeclaration } from '../Ast'
-import { BangaCallable, Environment, ReturnValue } from '../interface/Runtime'
-import { AstInterpreter } from './AstInterpreter'
-import { zip } from './utils'
 import { Project } from "ts-morph";
+import { Declaration, FuncDeclaration } from '../Ast';
 import { Interpreter } from '../interface/Interpreter';
-import { IdentifierToken } from '../interface/Lexer';
+import { BangaCallable, Environment, ReturnValue } from '../interface/Runtime';
+import { AstInterpreter } from './AstInterpreter';
+import { createEnvironment } from './Environment';
+import { GlobalTypes } from "./HindleyMilner";
+import { zip } from './utils';
 
 export class BangaFunction implements BangaCallable {
     constructor(
@@ -14,14 +15,14 @@ export class BangaFunction implements BangaCallable {
     checkArity(n: number): boolean {
         return this.decl.varargs || this.decl.params.length === n
     }
-    call(i: Interpreter, args: Declaration[]): any | Promise<any> {
+    call = (i: Interpreter, args: Declaration[]): any | Promise<any> => {
         const environment = createEnvironment(this.closure)
 
         zip(args, this.decl.params).forEach(
             ([arg, param]) => environment.define(param.value, arg))
 
         try {
-            i.executeBlock(this.decl.body.stmts, environment)
+            i.executeBlock(this.decl.body.stmts, createEnvironment(environment))
         } catch (result) {
             if (result instanceof ReturnValue) {
                 return result.value
@@ -40,22 +41,20 @@ export class BangaFunction implements BangaCallable {
 }
 
 export class AsyncBangaFunction extends BangaFunction {
-    static from(func: BangaFunction) {
-        return new AsyncBangaFunction(func.decl, func.closure)
-    }
-
-    async call(i: Interpreter, args: Declaration[]): Promise<any> {
+    call = async (i: Interpreter, args: Declaration[]): Promise<any> => {
         const environment = createEnvironment(this.closure)
 
         zip(args, this.decl.params).forEach(
             ([arg, param]) => environment.define(param.value, arg))
 
         try {
-            await i.executeBlock(this.decl.body.stmts, environment)
+            await i.executeBlock(this.decl.body.stmts, createEnvironment(environment))
         } catch (result) {
             if (result instanceof ReturnValue) {
                 return result.value
             }
+
+            throw result
         }
 
         return null
@@ -76,6 +75,7 @@ export class BangaPrintFunction implements BangaCallable {
     toString(): string {
         return 'print'
     }
+    type = GlobalTypes['print']
 }
 
 export class BangaImportFunction implements BangaCallable {
@@ -150,61 +150,5 @@ export class BangaImportFunction implements BangaCallable {
     toString(): string {
         return 'import'
     }
+    type = GlobalTypes['import']
 }
-
-class Env implements Environment {
-    constructor(public enclosing?: Environment) {}
-    get(name: string) {
-        if (this.values.has(name))
-            return this.values.get(name)
-
-        if (this.enclosing)
-            return this.enclosing.get(name)
-
-        throw new Error("(get) Undefined variable '" + name + "'.");
-    }
-    assign(name: IdentifierToken, value: any) {
-        if (this.values.has(name.value))
-            return this.values.set(name.value, value)
-
-        if (this.enclosing)
-            return this.enclosing.assign(name, value)
-
-        throw new Error("(assign) Undefined variable '" + name.value + "'.");
-    }
-    define(name: string, value: any) {
-        this.values.set(name, value)
-    }
-    has(name: string) {
-        return this.values.has(name)
-    }
-    getAt(distance: number, name: string) {
-        return this.ancestor(distance).values.get(name)
-    }
-    assignAt(distance: number, name: IdentifierToken, value: any) {
-        this.ancestor(distance).values.set(name.value, value)
-    }
-    clear() {
-        return this.values.clear()
-    }
-    entries() {
-        return this.values.entries()
-    }
-    ancestor(distance: number) {
-        let environment: Environment = this
-        for (let i = 0; i < distance; i++) {
-            environment = environment.enclosing!
-        }
-
-        return environment
-    }
-
-    public values: Map<string, any> = new Map()
-}
-
-export const createEnvironment: (d?: Environment) => Environment
-    = (d?: Environment) => new Env(d)
-
-export const StdLib: Environment = createEnvironment()
-    StdLib.define('print',  new BangaPrintFunction())
-    StdLib.define('import',  new BangaImportFunction())

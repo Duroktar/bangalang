@@ -2,7 +2,7 @@ import { resolve as resolvePath } from "path"
 import { AstInterpreter } from "./lib/AstInterpreter"
 import { FileReader } from "./lib/FileReader"
 import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
-import { StdLib } from "./lib/RuntimeLibrary"
+import { StdLib } from "./lib/StdLib"
 import { ScopeResolver } from "./lib/ScopeResolver"
 import { ConsoleReporter } from "./lib/ConsoleReporter"
 import { TokenLexer } from "./lib/TokenLexer"
@@ -18,7 +18,7 @@ function main(filename: string) {
     const parser = new TokenParser(reader)
     const typeEnv = new TypeEnv(GlobalTypes)
     const typeChecker = new HindleyMilner(reader, typeEnv)
-    const interpreter = new AstInterpreter(reader, StdLib)
+    const interpreter = new AstInterpreter(StdLib)
     const resolver = new ScopeResolver(interpreter)
 
     let errors = false
@@ -42,4 +42,6 @@ function main(filename: string) {
 }
 
 // main('/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl')
-main('/Users/duroktar/code/BangaLang/packages/core/tests/resolver-test.bl')
+// main('/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl')
+// main('/Users/duroktar/code/BangaLang/packages/core/tests/return-test.bl')
+main('/Users/duroktar/code/BangaLang/packages/core/tests/if-test.bl')
