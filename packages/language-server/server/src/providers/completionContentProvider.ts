@@ -1,5 +1,4 @@
 import { CompletionItem, TextDocumentPositionParams, CompletionItemKind } from 'vscode-languageserver/node';
-import { HindleyMilner } from '@bangalang/core';
 import { SourceDiagnostics } from '../types';
 
 export const completions: Record<string, CompletionItem> = {

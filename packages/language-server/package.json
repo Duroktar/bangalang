@@ -71,7 +71,7 @@
 		"develop:compile": "tsc -b",
 		"develop:watch": "tsc -b -w",
 		"compile": "webpack --mode=production --node-env=production",
-		"build:dev": "webpack --mode=development --node-env=development",
+		"build": "webpack --mode=development --node-env=development",
 		"watch": "webpack --watch",
 		"postinstall": "cd client && yarn install && cd ../server && yarn install && cd ..",
 		"test": "sh ./scripts/e2e.sh",

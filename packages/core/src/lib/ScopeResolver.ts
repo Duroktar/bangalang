@@ -66,7 +66,7 @@ export class ScopeResolver implements Visitor {
         this.currentFunction = enclosingFunction
     }
     private visit = (node: AstNode): void => {
-        node.acceptVisitor(this)
+        node?.acceptVisitor(this)
     }
     visitExpressionStmt(node: ExpressionStmt) {
         this.resolve(node.expr)

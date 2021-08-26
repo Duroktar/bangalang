@@ -204,8 +204,8 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             if (term.kind === 'BlockStmt') {
                 const type = term.stmts
                     .map(stmt => analyzeRec(stmt, env, nonGenerics))
-                    .pop()!
-                return Object.assign(term, { type }).type
+                    .pop()
+                return Object.assign(term, { type: type ?? neverType }).type
             }
             if (term.kind === 'CaseExpr') {
                 const exprT = analyzeRec(term.expr, env, nonGenerics)
@@ -400,7 +400,8 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             return `${t.name} ${typenames.join(' ')}`
         }
 
-        return UNREACHABLE(t, new Error('unreachable: typeToString -> ' + String(t)))
+        return UNREACHABLE(t)
+        // return UNREACHABLE(t, new Error('unreachable: typeToString -> ' + String(t)))
     }
 
     private variableName(t: TypeVariable): string {

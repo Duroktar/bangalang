@@ -1,4 +1,4 @@
-import type { HindleyMilner, ParserError, Program, SourceReader, Token, TypeCheckError, TypeEnv } from '@bangalang/core';
+import type { HindleyMilner, Interpreter, ParserError, Program, SourceReader, Token, TypeCheckError, TypeEnv } from '@bangalang/core';
 import type { TextDocumentPositionParams, CompletionItem, HoverParams } from 'vscode-languageserver';
 
 export type SourceDiagnostics = {
@@ -7,6 +7,7 @@ export type SourceDiagnostics = {
     types: string[];
     reader: SourceReader;
     tc: HindleyMilner;
+    interpreter: Interpreter;
     typeEnv: TypeEnv;
     errors: (ParserError | TypeCheckError)[];
 };

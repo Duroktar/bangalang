@@ -20,5 +20,5 @@ export function sourceDiagnosticsProvider(source: string): SourceDiagnostics {
 
     const errors = [...parser.errors, ...resolver.errors, ...typeChecker.errors];
 
-    return { tokens, ast, types, reader, errors, typeEnv, tc: typeChecker };
+    return { tokens, ast, types, reader, errors, typeEnv, interpreter, tc: typeChecker };
 }

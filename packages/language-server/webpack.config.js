@@ -1,7 +1,7 @@
 /* eslint-disable */
 // Generated using webpack-cli https://github.com/webpack/webpack-cli
 
-const path = require("path");
+// const path = require("path");
 
 const isProduction = process.env.NODE_ENV == "production";
 
@@ -62,6 +62,7 @@ module.exports = () => {
         config.mode = "production";
     } else {
         config.mode = "development";
+        consig.devtool = "eval-cheap-module-source-map";
     }
     return config;
 };
