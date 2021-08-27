@@ -111,7 +111,7 @@ export class AstInterpreter implements Interpreter {
     }
 
     visitLiteralExpr(node: Ast.LiteralExpr) {
-        return node.token.value
+        return node.value
     }
 
     visitReturnStmt(node: Ast.ReturnStmt) {

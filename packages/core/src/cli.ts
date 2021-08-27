@@ -29,7 +29,7 @@ function main(args: string[]) {
         parser: (r)      => new TokenParser(r),
         typechecker: (r) => new HindleyMilner(r, typeEnv),
         interpreter: ()  => new AstInterpreter(StdLib),
-        resolver: (i)    => new ScopeResolver(i),
+        resolver: (i)    => new ScopeResolver(i, typeEnv),
     })(debugMode)
 }
 

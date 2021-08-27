@@ -21,7 +21,7 @@ export class DiagnosticsController implements IDiagnosticsController {
         // This handler provides the initial list of the completion items.
         this.connection.onCompletion(
             (params: LS.TextDocumentPositionParams): LS.CompletionItem[] => {
-                this.connection.console.log('onCompletion');
+                // this.connection.console.log('onCompletion');
                 // The passed parameters contain the position in the text
                 // document for which the code completion got requested.
                 return this.providers.completionContentProvider(params, this.sourceData);

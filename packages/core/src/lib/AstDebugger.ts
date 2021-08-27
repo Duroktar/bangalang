@@ -193,7 +193,7 @@ export class AstDebuggableInterpreter implements Interpreter {
     }
 
     visitLiteralExpr = async (node: Ast.LiteralExpr) => {
-        const val = node.token.value
+        const val = node.value
         await this.onTracepoint(node)
         return val
     }

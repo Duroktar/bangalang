@@ -32,7 +32,7 @@
             "label": "tsc: watch - vscode-debugger"
         },
         {
-            "label": "Typecheck All",
+            "label": "Watch All",
             "dependsOn": [
                 "tsc: watch - core",
                 "tsc: watch - language-server",

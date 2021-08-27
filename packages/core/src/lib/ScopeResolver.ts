@@ -3,6 +3,8 @@ import { Interpreter } from "../interface/Interpreter";
 import { IdentifierToken } from "../interface/Lexer";
 import { ResolutionError } from "../interface/Resolver";
 import { Visitor } from "../interface/Visitor";
+import { TypeEnv } from "./HindleyMilner";
+import { BangaImportFunction } from "./RuntimeLibrary";
 import { Stack } from "./Stack";
 
 enum FunctionType {
@@ -13,7 +15,7 @@ enum FunctionType {
 export class ScopeResolver implements Visitor {
     public errors: ResolutionError[] = []
 
-    constructor(public interpreter: Interpreter) {}
+    constructor(public interpreter: Interpreter, public typeEnv: TypeEnv) {}
 
     public resolve = (program: Program | AstNode) => {
         if (Array.isArray(program)) {
@@ -129,6 +131,22 @@ export class ScopeResolver implements Visitor {
         this.resolve(node.right)
     }
     visitCallExpr(node: CallExpr) {
+        const name = (<any>node.callee).name;
+        const env = this.interpreter.globals;
+        const importFunc = env.values.get(name)
+        if (importFunc instanceof BangaImportFunction) {
+            const args = node.args.map((o: any) => o.value)
+            importFunc
+                .declareImports(this.typeEnv, args)
+                // .forEach(([name, _]) => {
+                //     if (name === 'arch') {
+                //         console.log(node)
+                //     }
+                //     this.resolveLocal(node, name)
+                //     // this.declare({ value: name } as any)
+                //     // this.define({ value: name } as any)
+                // })
+        }
         this.resolve(node.callee)
         this.resolve(node.args)
     }

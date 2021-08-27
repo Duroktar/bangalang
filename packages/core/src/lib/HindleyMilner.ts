@@ -20,6 +20,7 @@ export class TypeVariable {
         public instance?: TypeVariable,
         public name?: string,
         public label?: string,
+        public docs?: string,
     ) {}
 }
 
@@ -29,6 +30,7 @@ export class TypeOperator {
         public readonly name: string,
         public readonly types: TyVar[] = [],
         public label?: string,
+        public docs?: string,
     ) {}
 }
 
@@ -38,6 +40,7 @@ export class TypeTuple {
         public readonly types: TyVar[] = [],
         public variableLength: boolean = false,
         public label?: string,
+        public docs?: string,
     ) {}
 }
 
@@ -48,11 +51,11 @@ class ForAll {
     ) {}
 }
 
-export const intType = new TypeOperator(TypeName.NUMBER)
-export const strType = new TypeOperator(TypeName.STRING)
-export const boolType = new TypeOperator(TypeName.BOOLEAN)
-export const anyType = new TypeOperator(TypeName.ANY)
-export const neverType = new TypeOperator(TypeName.NEVER)
+export const intType = () => new TypeOperator(TypeName.NUMBER)
+export const strType = () => new TypeOperator(TypeName.STRING)
+export const boolType = () => new TypeOperator(TypeName.BOOLEAN)
+export const anyType = () => new TypeOperator(TypeName.ANY)
+export const neverType = () => new TypeOperator(TypeName.NEVER)
 export const FunctionType =
     (argType: TyVar, retType: TyVar) => new TypeOperator('=>', [argType, retType])
 export const FunctionArgs =
@@ -146,7 +149,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             if (term.kind === 'ClassDeclaration') {
                 // const type = this.getLiteralType(term, env, nonGenerics)
                 // return Object.assign(term, { type }).type
-                return neverType
+                return neverType()
             }
             if (term.kind === 'IfExprStmt') {
                 // TODO: assert cond type is boolean (??)
@@ -205,7 +208,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                 const type = term.stmts
                     .map(stmt => analyzeRec(stmt, env, nonGenerics))
                     .pop()
-                return Object.assign(term, { type: type ?? neverType }).type
+                return Object.assign(term, { type: type ?? neverType() }).type
             }
             if (term.kind === 'CaseExpr') {
                 const exprT = analyzeRec(term.expr, env, nonGenerics)
@@ -222,7 +225,7 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
                     this.tryWithErrMsg(
                         () => this.unify(mType, exprT, term),
                         () => this.getInvalidCaseOptionError(mType, exprT, rType ?? resType, matcher),
-                        matcher.token)
+                        getToken(matcher))
 
                     if (rType === undefined) {
                         rType = resType
@@ -299,9 +302,9 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
 
     getLiteralType(term: Ast.LiteralExpr, env: TypeEnv, nonGenerics: Set<TyVar>): TyVar {
         switch (typeof term.value) {
-            case 'string':   return strType;
-            case 'number':   return intType;
-            case 'boolean':  return boolType;
+            case 'string':   return strType();
+            case 'number':   return intType();
+            case 'boolean':  return boolType();
             default: {
                 throw new Error('Unknown literal type: ' + term.raw)
             }
@@ -371,15 +374,14 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             if (t.instance instanceof TypeVariable) {
                 return this.typeToString(t.instance)
             }
-            console.log({ t })
-            return t.name ?? this.variableName(t)
+            return this.variableName(t)
         }
         if (t instanceof TypeTuple) {
             const typenames = t.types
-                .map(t => this.typeToString(t))
+                .map(tp => tp.label ? `${tp.label}: ${this.typeToString(tp)}` : this.typeToString(tp))
 
             if (t.variableLength)
-                return `(...${typenames[0]})`
+                return `(...${typenames[typenames.length - 1]})`
 
             return `(${typenames.join(', ')})`
         }
@@ -590,9 +592,13 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
 
 export type BuiltinTypes = typeof GlobalTypes;
 
-export const GlobalTypes: Record<string, TyVar> = {
-    print: FunctionType(FunctionArgs([strType], true), intType),
-    import: FunctionType(FunctionArgs([strType], false), intType),
-    relative: FunctionType(FunctionArgs([strType], true), strType),
-    join: FunctionType(FunctionArgs([strType], true), strType),
-}
+export const GlobalTypes: Record<string, TyVar> = (() => {
+    const printArgs = FunctionArgs([strType()], true);
+    Object.assign(printArgs.types[0], { label: 'text'})
+    const importArgs = FunctionArgs([strType()], false);
+    Object.assign(importArgs.types[0], { label: 'package'})
+    return {
+        print: FunctionType(printArgs, intType()),
+        import: FunctionType(importArgs, intType()),
+    }
+})()

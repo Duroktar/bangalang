@@ -62,6 +62,21 @@
             "protocol": "inspector",
             "internalConsoleOptions": "openOnSessionStart"
         },
+        {
+            "name": "Debug Bangalang Core (test-parser.ts)",
+            "type": "node",
+            "request": "launch",
+            "args": [
+                "${workspaceRoot}/packages/core/src/test-parser.ts"
+            ],
+            "runtimeArgs": [
+                "-r",
+                "ts-node/register"
+            ],
+            "cwd": "${workspaceRoot}/packages/core",
+            "protocol": "inspector",
+            "internalConsoleOptions": "openOnSessionStart"
+        },
 		{
 			"type": "extensionHost",
 			"request": "launch",

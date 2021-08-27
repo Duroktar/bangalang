@@ -1,4 +1,5 @@
 import { CompletionItem, TextDocumentPositionParams, CompletionItemKind } from 'vscode-languageserver/node';
+import { getToken } from '../../../../core/build';
 import { SourceDiagnostics } from '../types';
 
 export const completions: Record<string, CompletionItem> = {
@@ -8,18 +9,22 @@ export const completions: Record<string, CompletionItem> = {
 		data: 'let',
 		detail: 'A `let` variable binding statement.',
 		documentation: 'http://github.com/duroktar/bangalang/docs/language/spec.html#variables-let',
-	}
+	},
 };
 
 export function completionContentProvider(
 	params: TextDocumentPositionParams,
-	sourceData: SourceDiagnostics,
+	diagnostics: SourceDiagnostics,
 ): CompletionItem[] {
-	const fromTypeEnv = Object.entries(sourceData.typeEnv.map).map(([key, value]) => ({
+    if (!diagnostics)
+        return [];
+    const { tc, typeEnv } = diagnostics;
+    const fromTypeEnv = Object.entries(typeEnv.map).map(([key, value]) => ({
 		label: key,
 		kind: CompletionItemKind.Variable,
 		data: key,
-		detail: `${key}: ${sourceData.tc.typeToString(value)}`
+		detail: `${key}: ${value.label ?? tc.typeToString(value)}`,
+        documentation: value.docs,
 	}));
 	return Object.values(completions).concat(fromTypeEnv);
 }

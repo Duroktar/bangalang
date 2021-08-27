@@ -22,7 +22,7 @@ function main(path: string) {
     const parser = new TokenParser(reader)
     const typeChecker = new HindleyMilner(reader, typeEnv)
     const interpreter = new AstDebuggableInterpreter(StdLib)
-    const resolver = new ScopeResolver(interpreter)
+    const resolver = new ScopeResolver(interpreter, typeEnv)
 
     const tokens = lexer.lex()
     const ast = parser.parse(tokens)

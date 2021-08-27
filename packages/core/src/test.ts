@@ -19,7 +19,7 @@ function main(filename: string) {
     const typeEnv = new TypeEnv(GlobalTypes)
     const typeChecker = new HindleyMilner(reader, typeEnv)
     const interpreter = new AstInterpreter(StdLib)
-    const resolver = new ScopeResolver(interpreter)
+    const resolver = new ScopeResolver(interpreter, typeEnv)
 
     let errors = false
 
@@ -44,4 +44,5 @@ function main(filename: string) {
 // main('/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl')
 // main('/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl')
 // main('/Users/duroktar/code/BangaLang/packages/core/tests/return-test.bl')
-main('/Users/duroktar/code/BangaLang/packages/core/tests/if-test.bl')
+// main('/Users/duroktar/code/BangaLang/packages/core/tests/if-test.bl')
+main('/Users/duroktar/code/BangaLang/packages/core/import-test.bl')

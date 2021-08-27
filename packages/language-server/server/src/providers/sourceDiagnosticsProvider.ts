@@ -2,14 +2,14 @@ import { AstInterpreter, GlobalTypes, HindleyMilner, ScopeResolver, SourceReader
 import type { SourceDiagnostics } from '../types';
 
 export function sourceDiagnosticsProvider(source: string): SourceDiagnostics {
+    const typeEnv = new TypeEnv(GlobalTypes);
 
     const reader = new SourceReader(source);
     const lexer = new TokenLexer(reader);
     const parser = new TokenParser(reader);
-    const typeEnv = new TypeEnv(GlobalTypes);
     const typeChecker = new HindleyMilner(reader, typeEnv);
     const interpreter = new AstInterpreter(StdLib);
-    const resolver = new ScopeResolver(interpreter);
+    const resolver = new ScopeResolver(interpreter, typeEnv);
 
     const tokens = lexer.lex();
     const ast = parser.parse(tokens);

@@ -1,4 +1,12 @@
-import('path');
+// import('path');
+import('fs');
+// import('stream');
 
-let rv = join('./', 'src', 'lib');
-print(rv);
+// let rv = join('./', 'src', 'lib');
+
+
+print('hat')
+
+func greet(arg) {
+    return 'Hello ' + arg;
+}

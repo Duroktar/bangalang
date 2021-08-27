@@ -157,6 +157,22 @@ export function getKeywordType(op: string) {
     return keywordTypeMap[op as KeywordType]
 }
 
+export function createToken<K extends TokenKind>(kind: K): TokenOf<K> {
+    return {
+        kind,
+        lineInfo: {
+            start: {
+                col: 0,
+                line: 0
+            },
+            end: {
+                col: 0,
+                line: 0
+            },
+        }
+    } as any
+}
+
 export function getToken(expr: Ast.AstNode): Token {
     if (expr instanceof Ast.LiteralExpr) {
         return expr.token

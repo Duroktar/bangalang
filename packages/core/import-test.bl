@@ -1,0 +1,7 @@
+import('fs')
+import('path')
+import('os')
+
+print('sep ->', sep)
+print('delimiter ->', delimiter)
+print('arch ->', arch())
