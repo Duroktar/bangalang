@@ -161,12 +161,8 @@ export class TokenParser implements Parser<Token[], object[]> {
             this.consume(TokenKind.LEFT_BRACE, "Expected '{' before pass block.")
             const pass = this.tryWithErrMsg(() => new BlockStmt(this.block()), 'Expected block for pass case.')
             this.munchSemicolon()
-            let fail: Ast.BlockStmt | null = null
-            if (this.match(TokenKind.ELSE)) {
-                this.consume(TokenKind.LEFT_BRACE, "Expected '{' before fail block.")
-                fail = this.tryWithErrMsg(() => new BlockStmt(this.block()), 'Expected block for else case.')
-                this.munchSemicolon()
-            }
+            this.consume(TokenKind.LEFT_BRACE, "Expected '{' before fail block.")
+            const fail = this.tryWithErrMsg(() => new BlockStmt(this.block()), 'Expected block for else case.')
             this.munchSemicolon()
             return new Ast.IfExprStmt(cond, pass, fail, token)
         }

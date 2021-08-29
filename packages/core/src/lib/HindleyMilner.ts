@@ -154,10 +154,9 @@ export class HindleyMilner implements TypeChecker<Ast.Program> {
             if (term.kind === 'IfExprStmt') {
                 // TODO: assert cond type is boolean (??)
                 let cond = analyzeRec(term.cond, env, nonGenerics)
+                this.unify(cond, boolType(), term)
                 let pass = analyzeRec(term.pass, env, nonGenerics)
-                let fail = term.fail
-                    ? analyzeRec(term.fail, env, nonGenerics)
-                    : pass
+                let fail = analyzeRec(term.fail, env, nonGenerics)
                 this.unify(pass, fail, term)
                 Object.assign(term, { type: pass })
                 return pass

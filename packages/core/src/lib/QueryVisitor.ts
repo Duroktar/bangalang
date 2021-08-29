@@ -181,7 +181,7 @@ class QuerySelectorAllVisitor implements Visitor {
         }
         node.cond.acceptVisitor(this);
         node.pass.acceptVisitor(this);
-        node.fail?.acceptVisitor(this);
+        node.fail.acceptVisitor(this);
     }
     visitVariableExpr(node: Ast.VariableExpr): any {
         if (this._selectors.includes(node.token.kind))

@@ -160,11 +160,9 @@ export class AstDebuggableInterpreter implements Interpreter {
 
     visitIfExprStmt = async (node: Ast.IfExprStmt) => {
         const cond = await this.evaluate(node.cond)
+        const res = node[cond ? 'pass' : 'fail'];
         await this.onTracepoint(node)
-        if (!!cond)
-            return await this.evaluateBlock(node.pass, this.environment)
-        else if (node.fail)
-            return await this.evaluateBlock(node.fail, this.environment)
+        return await this.evaluateBlock(res, this.environment)
     }
 
     visitVariableExpr = async (node: Ast.VariableExpr) => {

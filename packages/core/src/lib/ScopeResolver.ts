@@ -103,7 +103,7 @@ export class ScopeResolver implements Visitor {
     visitIfExprStmt(node: IfExprStmt) {
         this.resolve(node.cond)
         this.resolve(node.pass)
-        if (node.fail) this.resolve(node.fail)
+        this.resolve(node.fail)
     }
     visitLiteralExpr(node: LiteralExpr) {
         return

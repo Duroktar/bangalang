@@ -104,10 +104,8 @@ export class AstInterpreter implements Interpreter {
 
     visitIfExprStmt(node: Ast.IfExprStmt) {
         const cond = this.evaluate(node.cond)
-        if (!!cond)
-            return this.evaluateBlock(node.pass, this.environment)
-        else if (node.fail)
-            return this.evaluateBlock(node.fail, this.environment)
+        const res = node[cond ? 'pass' : 'fail']
+        return this.evaluateBlock(res, this.environment)
     }
 
     visitLiteralExpr(node: Ast.LiteralExpr) {

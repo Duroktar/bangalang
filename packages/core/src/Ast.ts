@@ -250,7 +250,7 @@ export class IfExprStmt implements Visitable {
     constructor(
         public cond: Expression,
         public pass: BlockStmt,
-        public fail: BlockStmt | null = null,
+        public fail: BlockStmt,
         public token: Token,
     ) { }
 
