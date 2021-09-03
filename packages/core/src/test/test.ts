@@ -1,12 +1,12 @@
 import { resolve as resolvePath } from "path"
-import { AstInterpreter } from "./lib/AstInterpreter"
-import { FileReader } from "./lib/FileReader"
-import { GlobalTypes, HindleyMilner, TypeEnv } from "./lib/HindleyMilner"
-import { StdLib } from "./lib/StdLib"
-import { ScopeResolver } from "./lib/ScopeResolver"
-import { ConsoleReporter } from "./lib/ConsoleReporter"
-import { TokenLexer } from "./lib/TokenLexer"
-import { TokenParser } from "./lib/TokenParser"
+import { AstInterpreter } from "../lib/AstInterpreter"
+import { FileReader } from "../lib/FileReader"
+import { GlobalTypes, HindleyMilner, TypeEnv } from "../lib/HindleyMilner"
+import { StdLib } from "../lib/StdLib"
+import { ScopeResolver } from "../lib/ScopeResolver"
+import { ConsoleReporter } from "../lib/ConsoleReporter"
+import { TokenLexer } from "../lib/TokenLexer"
+import { TokenParser } from "../lib/TokenParser"
 
 const debug = false
 

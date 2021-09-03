@@ -22,7 +22,7 @@
             "type": "node",
             "request": "launch",
             "args": [
-                "${workspaceRoot}/packages/core/src/test.ts"
+                "${workspaceRoot}/packages/core/src/test/test.ts"
             ],
             "runtimeArgs": [
                 "-r",
@@ -37,7 +37,7 @@
             "type": "node",
             "request": "launch",
             "args": [
-                "${workspaceRoot}/packages/core/src/hm-test.ts"
+                "${workspaceRoot}/packages/core/src/test/hm-test.ts"
             ],
             "runtimeArgs": [
                 "-r",
@@ -52,7 +52,7 @@
             "type": "node",
             "request": "launch",
             "args": [
-                "${workspaceRoot}/packages/core/src/test-debugger.ts"
+                "${workspaceRoot}/packages/core/src/test/test-debugger.ts"
             ],
             "runtimeArgs": [
                 "-r",
@@ -67,7 +67,7 @@
             "type": "node",
             "request": "launch",
             "args": [
-                "${workspaceRoot}/packages/core/src/test-parser.ts"
+                "${workspaceRoot}/packages/core/src/test/test-parser.ts"
             ],
             "runtimeArgs": [
                 "-r",
@@ -82,7 +82,7 @@
             "type": "node",
             "request": "launch",
             "args": [
-                "${workspaceRoot}/packages/core/src/test-query.ts"
+                "${workspaceRoot}/packages/core/src/test/test-query.ts"
             ],
             "runtimeArgs": [
                 "-r",
@@ -108,18 +108,6 @@
 			"port": 6099,
 			"restart": true,
 			"outFiles": ["${workspaceRoot}/packages/language-server/server/out/**/*.js"]
-		},
-		{
-			"name": "Language Server E2E Test",
-			"type": "extensionHost",
-			"request": "launch",
-			"runtimeExecutable": "${execPath}",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceRoot}/packages/language-server",
-				"--extensionTestsPath=${workspaceRoot}/packages/language-server/client/out/test/index",
-				"${workspaceRoot}/packages/language-server/client/testFixture"
-			],
-			"outFiles": ["${workspaceRoot}/packages/language-server/client/out/test/**/*.js"]
 		}
 	],
 	"compounds": [

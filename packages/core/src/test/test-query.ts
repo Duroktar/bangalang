@@ -1,9 +1,9 @@
 import { resolve as resolvePath } from "path"
-import { ConsoleReporter } from "./lib/ConsoleReporter"
-import { FileReader } from "./lib/FileReader"
-import { querySelectorAll } from "./lib/QueryVisitor"
-import { TokenLexer } from "./lib/TokenLexer"
-import { TokenParser } from "./lib/TokenParser"
+import { ConsoleReporter } from "../lib/ConsoleReporter"
+import { FileReader } from "../lib/FileReader"
+import { querySelectorAll } from "../lib/QueryVisitor"
+import { TokenLexer } from "../lib/TokenLexer"
+import { TokenParser } from "../lib/TokenParser"
 
 function main(filename: string) {
     const reader = new FileReader(resolvePath(filename))
