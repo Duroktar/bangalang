@@ -4,5 +4,10 @@
         "**/out": true,
         "**/dist": true,
         "**/build": true,
+    },
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#3B2B12",
+        "titleBar.activeBackground": "#523C19",
+        "titleBar.activeForeground": "#FDFBF7"
     }
 }

@@ -9,6 +9,7 @@
     "cli:debug": "node build/test-debugger.js",
     "cli:test": "node build/test.js",
     "parser:test": "node build/test-parser.js",
+    "query:test": "node build/test-query.js",
     "dev": "ts-node src/cli.ts",
     "test": "ts-node src/test.ts",
     "test:hm": "ts-node src/hm-test.ts",

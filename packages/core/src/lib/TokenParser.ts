@@ -334,7 +334,8 @@ export class TokenParser implements Parser<Token[], object[]> {
             switch (this.peek().kind) {
                 case TokenKind.FUNC:
                 case TokenKind.LET:
-                case TokenKind.PRINT:
+                case TokenKind.CASE:
+                case TokenKind.CLASS:
                 case TokenKind.RETURN:
                     return
             }

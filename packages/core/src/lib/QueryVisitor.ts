@@ -4,7 +4,7 @@ import { Visitor } from "../interface/Visitor";
 import { Typed } from "../interface/TypeCheck";
 import { findTokenAtLocation } from "./utils";
 
-type QueryData = Ast.Program | Ast.Statement | Ast.Expression;
+type QueryData = Ast.Program | Ast.AstNode;
 
 class QueryVisitor implements Visitor {
     constructor(public target: Token) {}
@@ -144,7 +144,7 @@ class QueryVisitor implements Visitor {
 class QuerySelectorAllVisitor implements Visitor {
     constructor(public selectors: string[]) {
         this._selectors = selectors.map((s) =>
-            s.trim().replace(/^(\.){1}/, "")
+            s.trim().replace('.', '')
         );
     }
 
@@ -219,8 +219,11 @@ class QuerySelectorAllVisitor implements Visitor {
         });
     }
     visitFuncDeclaration(node: Ast.FuncDeclaration): any {
-        if (this._selectors.includes(node.name.kind)) {
+        if (this._selectors.includes(node.func.kind)) {
             this._selected.push(node);
+        }
+        if (this._selectors.includes(node.name.kind)) {
+            this._selected.push(node.name);
         }
         node.params.forEach((param) => {
             if (this._selectors.includes(param.kind)) {
@@ -237,6 +240,9 @@ class QuerySelectorAllVisitor implements Visitor {
         });
     }
     visitCaseExpr(node: Ast.CaseExpr) {
+        if (this._selectors.includes(node.token.kind)) {
+            this._selected.push(node);
+        }
         if (this._selectors.includes(node.expr.kind)) {
             this._selected.push(node.expr);
         }

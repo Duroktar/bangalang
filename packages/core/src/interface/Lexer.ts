@@ -41,9 +41,6 @@ export enum TokenKind {
     IF = 'if',
     ELSE = 'else',
 
-    // -- temporary
-    PRINT = 'print',
-
     // --
     EOF = '<EOF>',
 }
@@ -70,7 +67,6 @@ export type StringToken = TokenOf<TokenKind.STRING>
 export type IdentifierToken = TokenOf<TokenKind.IDENTIFIER>
 export type TrueToken = TokenOf<TokenKind.TRUE>
 export type FalseToken = TokenOf<TokenKind.FALSE>
-export type PrintToken = TokenOf<TokenKind.PRINT>
 export type CaseToken = TokenOf<TokenKind.CASE>
 export type ArrowToken = TokenOf<TokenKind.ARROW>
 export type ClassToken = TokenOf<TokenKind.CLASS>
@@ -135,7 +131,6 @@ export type Token = (
     | Kinded<TokenKind.IF>
     | Kinded<TokenKind.ELSE>
     | Kinded<TokenKind.RETURN>
-    | Kinded<TokenKind.PRINT>
     | Kinded<TokenKind.EOF>
 ) & LineInfo
 
