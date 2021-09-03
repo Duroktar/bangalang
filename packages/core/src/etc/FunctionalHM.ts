@@ -1,7 +1,7 @@
 import type * as Ast from '../Ast';
 import { getToken, lineInfo, Token } from '../interface/Lexer';
 import { TypeCheckError, TypeName } from '../interface/TypeCheck';
-import { format, UNREACHABLE, zip } from "./utils";
+import { format, UNREACHABLE, zip } from "../lib/utils";
 
 function error(msg: string, token: Token) {
     return new TypeCheckError(msg, token)
