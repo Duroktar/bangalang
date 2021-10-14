@@ -5,18 +5,10 @@ import { Interpreter } from "../interface/Interpreter";
 import { getToken, TokenKind } from "../interface/Lexer";
 import { BangaCallable, Environment, ReturnValue, RuntimeError } from "../interface/Runtime";
 import { Visitable } from "../interface/Visitor";
+import { Context, createContext, Debugger } from "./DebuggerMode";
 import { createEnvironment } from "./Environment";
 import { AsyncBangaFunction } from "./RuntimeLibrary";
 import { format, is } from "./utils";
-
-type Context = {
-    sender?: Context
-    currentNode?: Visitable
-    returnReached: boolean
-};
-
-const createContext: (currentNode?: Visitable, sender?: Context) => Context
-    = (currentNode, sender) => ({ currentNode, returnReached: false, sender })
 
 export type ProcessEvents =
     | 'breakpoint-reached'
@@ -301,67 +293,12 @@ export class AstDebuggableInterpreter implements Interpreter {
     private semaphore: Semaphore
 }
 
-abstract class DebuggerMode {
-    constructor(_debugger: AstDebugger) {
-        this.debugger = _debugger;
-    }
-    public debugger: AstDebugger
-    abstract onTracepoint(node: Ast.AstNode, ctx?: unknown): any;
-    abstract stepOver(): any
-    abstract stepInto(): any
-    abstract continue(): any
-}
-class ContinueMode extends DebuggerMode {
-    onTracepoint(node: Ast.AstNode) {
-        if (this.debugger.isBreakpoint(node))
-            return this.debugger.tracepointReachedFor(node)
-    }
-    public stepOver = () => this.debugger.setMode('step-over')
-    public stepInto = () => this.debugger.setMode('step-into')
-    public continue = () => this.debugger.runInterpreter()
-}
-class StepIntoMode extends DebuggerMode {
-    onTracepoint(node: Ast.AstNode) {
-        return this.debugger.tracepointReachedFor(node)
-    }
-    public stepOver = () => this.debugger.setMode('step-over')
-    public stepInto = () => this.debugger.runInterpreter()
-    public continue = () => this.debugger.setMode('continue')
-}
-class StepOverMode extends DebuggerMode {
-    constructor(_debugger: AstDebugger, context: Context) {
-        super(_debugger)
-        this.context = context
-    }
-    onTracepoint(node: Ast.AstNode) {
-        if (this.context === this.debugger.context)
-            return this.debugger.tracepointReachedFor(node)
-    }
-    public stepOver = () => this.debugger.runInterpreter()
-    public stepInto = () => this.debugger.setMode('step-into')
-    public continue = () => this.debugger.setMode('continue')
-
-    public context: Context
-}
-
-export class AstDebugger {
+export class AstDebugger extends Debugger {
     constructor(public interpreter: AstDebuggableInterpreter) {
-        this.mode = new ContinueMode(this)
-    }
-    public breakpoints: Set<Ast.AstNode> = new Set()
-    public mode: DebuggerMode
-    public context: Context = createContext()
-    public stepOver = () => this.mode.stepOver()
-    public stepInto = () => this.mode.stepInto()
-    public continue = () => this.mode.continue()
-    public onTracepoint = (node: Ast.AstNode, ctx?: unknown) => {
-        return this.mode.onTracepoint(node, ctx)
+        super()
     }
     public runInterpreter = () => {
         this.interpreter.run()
-    }
-    public addBreakpointOn = (node: Ast.AstNode) => {
-        this.breakpoints.add(node)
     }
     public tracepointReachedFor = async (node: Ast.AstNode) => {
         await this.interpreter.process.pause()
@@ -369,21 +306,5 @@ export class AstDebugger {
             'breakpoint-reached',
             getToken(node).lineInfo.start.line,
         )
-    }
-    public isBreakpoint = (node: Ast.AstNode) => {
-        return this.breakpoints.has(node)
-    }
-    public setMode = (mode: 'continue' | 'step-into' | 'step-over') => {
-        switch (mode) {
-            case 'continue': {
-                this.mode = new ContinueMode(this)
-                break }
-            case 'step-into': {
-                this.mode = new StepIntoMode(this)
-                break }
-            case 'step-over': {
-                this.mode = new StepOverMode(this, this.context)
-                break }
-        }
     }
 }

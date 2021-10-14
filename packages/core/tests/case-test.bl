@@ -33,7 +33,7 @@ let res = case (world) {
     world -> '666';
     'morp' -> 'hat';
     _ -> '3333';
-    // 4 -> 5;
+    4 -> 5;
 }
 
 print(res)

@@ -1,15 +1,12 @@
-import { tsconfigResolverSync } from 'tsconfig-resolver';
-import { Project, SyntaxKind, ts } from "ts-morph";
-import {  Declaration, FuncDeclaration, LiteralExpr } from '../Ast';
+import { Project, ts } from "ts-morph";
+import { Declaration, FuncDeclaration } from '../Ast';
 import { Interpreter } from '../interface/Interpreter';
-import { createToken, TokenKind } from "../interface/Lexer";
 import { BangaCallable, Environment, ReturnValue } from '../interface/Runtime';
 import { AstInterpreter } from './AstInterpreter';
 import { createEnvironment } from './Environment';
 import { GlobalTypes, TypeEnv } from "./HindleyMilner";
 import { TsTypeParser } from "./TsTypeParser";
 import { zip } from './utils';
-import { Visitable } from '../interface/Visitor';
 
 export class BangaFunction implements BangaCallable {
     constructor(
@@ -93,6 +90,15 @@ export class BangaNativeJsFunction implements BangaCallable {
 
 export class BangaImportFunction implements BangaCallable {
     static typeParser = new TsTypeParser();
+    static project = new Project({
+        compilerOptions: {
+            target: ts.ScriptTarget.ESNext,
+            lib: [
+                'lib.esnext.full.d.ts',
+            ],
+        },
+    });
+
     checkArity(n: number): boolean {
         return n === 1
     }
@@ -129,48 +135,21 @@ export class BangaImportFunction implements BangaCallable {
                         imported[name] = rtVal
                     }
                 })
-
-            // exprts.map(([n, t]) => {
-            //     // console.log('searching name:', n)
-            //     const typeText = tc.getTypeText(t);
-            //     // console.log('typeText:', typeText)
-            //     const tsType = this.typeParser.parse(typeText);
-            //     // console.log('tsType:', tsType)
-            //     if (tsType) {
-            //         const bangaType = this.typeParser.toBangaType(tsType);
-            //         const obj = i.globals.values.get(n)
-            //         obj.type = bangaType;
-            //         bangaType.label = n;
-            //         Object.assign(bangaType, { label: n })
-            //         Object.assign(obj, { type: bangaType })
-            //         // console.log('-->',{ obj })
-            //         i.globals.define(n, obj)
-            //         if (obj.arity)
-            //             Object.assign(obj, { arity: () => (tsType as TsFuncType).args.length })
-            //     }
-            // })
         }
     }
 
     declareImports(typeEnv: TypeEnv, args: any[]) {
         const [moduleName, ..._] = args
 
-        // https://stackoverflow.com/questions/39588436/how-to-parse-typescript-definition-to-json
+        const { typeParser, project } = BangaImportFunction;
 
-        const project = new Project({
-            compilerOptions: {
-                target: ts.ScriptTarget.ESNext,
-                lib: [
-                    'lib.esnext.full.d.ts',
-                ],
-            },
-        });
+        // https://stackoverflow.com/questions/39588436/how-to-parse-typescript-definition-to-json
 
         const temp =
               `import * as ${moduleName} from '${moduleName}';`
             + `declare let result: { [Key in keyof typeof ${moduleName}]: (typeof ${moduleName})[Key] };`
 
-        const srcFile = project.createSourceFile('index.ts', temp)
+        const srcFile = project.createSourceFile(`${moduleName}.ts`, temp)
 
         const tc = project.getTypeChecker()
 
@@ -183,32 +162,10 @@ export class BangaImportFunction implements BangaCallable {
 
         const type = tc.getTypeAtLocation(resultDec);
 
-        // console.log(tc.getTypeText(
-        //     type,
-        //     valueDeclaration,
-        //     formatFlags,
-        // ))
-
         return type.getProperties()
-            .map(prop => ({
-                name: prop.getName(),
-                type: tc.getTypeText(
-                    tc.getTypeOfSymbolAtLocation(prop, valueDeclaration),
-                    valueDeclaration,
-                    formatFlags,
-                ),
-            }))
-            .reduce((acc, prop) => {
-                if (prop.type.includes('import(')) {
-                    // console.error("can't handle funky import type\n\t", prop)
-                    return acc
-                }
-                if (prop.type.startsWith('typeof')) {
-                    // console.error("can't handle funky typeof stuff\n\t", prop)
-                    return acc
-                }
-                const { name, type } = prop
-                const desc = name.split(' ').map(o => o.trim())
+            .reduce((acc, sym) => {
+                const propName = sym.getName()
+                const desc = propName.split(' ').map(o => o.trim())
 
                 switch (desc[0]) {
                     case 'readonly':
@@ -218,35 +175,42 @@ export class BangaImportFunction implements BangaCallable {
 
                 if (desc.length > 1) {
                     // console.error("can't handle type\n\t", prop)
-                } else if (name.startsWith('_')) {
+                } else if (propName.startsWith('_')) {
                     // console.log("importing type\n\t", prop)
-                } else if (name && type) {
+                } else {
                     // console.log("importing type\n\t", prop)
-                    acc.push([name, type])
+                    const typeName = tc.getTypeText(
+                        tc.getTypeOfSymbolAtLocation(sym, valueDeclaration),
+                        valueDeclaration,
+                        formatFlags,
+                    )
+                    if (typeName.includes('import(')) {
+                        // console.error("can't handle funky import type\n\t", prop)
+                        return acc
+                    }
+                    if (typeName.startsWith('typeof')) {
+                        // console.error("can't handle funky typeof stuff\n\t", prop)
+                        return acc
+                    }
+                    const tsType = typeParser.parse(typeName);
+                    if (tsType) {
+                        const bangaType = typeParser.toBangaType(tsType)
+
+                        const property = type.getProperty(propName)
+                        const docLines = property?.compilerSymbol
+                            .getDocumentationComment(tc.compilerObject)
+
+                        const docs = docLines?.map(o => o.text).join('\n')
+                        const label = typeParser.stringify(tsType)
+                        typeEnv.extend(propName, Object.assign(bangaType, { docs, label }))
+                    }
+                    acc.push([propName, typeName])
                 }
                 return acc
             }, [] as [string, string][])
-            .map(([propName, typeName]) => {
-                const { typeParser } = BangaImportFunction
-                const tsType = typeParser.parse(typeName);
-                if (tsType) {
-                    const bangaType = typeParser.toBangaType(tsType)
-
-                    const property = type.getProperty(propName)
-                    const docLines = property?.compilerSymbol
-                        .getDocumentationComment(tc.compilerObject)
-
-                    const docs = docLines?.map(o => o.text).join('\n')
-                    const label = typeParser.stringify(tsType)
-                    typeEnv.extend(propName, Object.assign(bangaType, { docs, label }))
-                }
-                return [propName, typeName] as const
-            })
     }
 
     toString(): string {
         return 'import'
     }
-
-    private type = GlobalTypes['import']
 }

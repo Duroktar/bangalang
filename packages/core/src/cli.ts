@@ -34,7 +34,7 @@ function main(args: string[]) {
 }
 
 try {
-    // main(process.argv)
+    main(process.argv)
     // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/another-test-file.bl'])
     // main(['', '', '-D', '/Users/duroktar/code/BangaLang/packages/core/tests/simple-test.bl'])
     // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/print-test.bl'])
@@ -44,7 +44,7 @@ try {
     // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/case-test.bl'])
 
     // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/import-test.bl'])
-    main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl'])
+    // main(['', '', '', '/Users/duroktar/code/BangaLang/packages/core/tests/debugger-test.bl'])
 } catch (err) {
     console.error(err)
 }
