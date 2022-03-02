@@ -1,0 +1,198 @@
+{
+  "name": "banga-debugger",
+  "displayName": "BangaLang Debugger",
+  "version": "0.0.1",
+  "publisher": "duroktar",
+  "description": "Based on the starter extension for developing debug adapters for VS Code.",
+  "license": "MIT",
+  "repository": {
+      "type": "git",
+      "url": "https://github.com/Microsoft/vscode-extension-samples"
+  },
+  "keywords": [
+    "multi-root ready"
+  ],
+  "engines": {
+    "vscode": "^1.59.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "private": true,
+  "scripts": {
+    "vscode:prepublish": "yarn run package-ext && yarn run package-web",
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts",
+    "watch": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/extension.webpack.config.js",
+    "watch2": "tsc -watch -p ./",
+    "pretest": "yarn run compile && yarn run lint",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "package-ext": "webpack --mode production --config ./build/extension.webpack.config.js",
+    "compile-web": "webpack --devtool nosources-source-map --config ./build/web-extension.webpack.config.js",
+    "watch-web": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/web-extension.webpack.config.js",
+    "package-web": "webpack --mode production --config ./build/web-extension.webpack.config.js"
+  },
+  "dependencies": {
+    "await-notify": "1.0.1",
+    "vscode-debugadapter": "^1.49.0-pre.0"
+  },
+  "devDependencies": {
+    "@bangalang/core": "file:../core",
+    "@types/vscode": "^1.59.0",
+    "@types/glob": "^7.1.4",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^14.14.37",
+    "eslint": "^7.32.0",
+    "@typescript-eslint/eslint-plugin": "^4.29.2",
+    "@typescript-eslint/parser": "^4.29.2",
+    "glob": "^7.1.7",
+    "mocha": "^9.0.3",
+    "typescript": "^4.3.5",
+    "vscode-debugadapter-testsupport": "^1.49.0-pre.0",
+    "vsce": "^1.96.1",
+    "ts-loader": "^8.1.0",
+    "webpack": "^4.46.0",
+    "webpack-cli": "^3.3.12"
+  },
+  "main": "./dist/ext/extension.js",
+  "browser": "./dist/web/extension.js",
+  "activationEvents": [
+    "onDebugResolve:banga",
+    "onDebugDynamicConfigurations:banga",
+    "onCommand:extension.banga-debug.getProgramName",
+    "onCommand:extension.banga-debug.runEditorContents",
+    "onCommand:extension.banga-debug.debugEditorContents"
+  ],
+  "workspaceTrust": {
+    "request": "never"
+  },
+  "contributes": {
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "extension.banga-debug.runEditorContents",
+          "when": "resourceLangId == bangalang"
+        },
+        {
+          "command": "extension.banga-debug.debugEditorContents",
+          "when": "resourceLangId == bangalang"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "extension.banga-debug.debugEditorContents",
+          "when": "resourceLangId == bangalang"
+        },
+        {
+          "command": "extension.banga-debug.runEditorContents",
+          "when": "resourceLangId == bangalang"
+        }
+      ],
+      "debug/variables/context": [
+        {
+          "command": "extension.banga-debug.toggleFormatting",
+          "when": "debugType == 'banga' && debugProtocolVariableMenuContext == 'simple'"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "extension.banga-debug.debugEditorContents",
+        "title": "Debug File",
+        "category": "Banga Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "extension.banga-debug.runEditorContents",
+        "title": "Run File",
+        "category": "Banga Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(play)"
+      },
+      {
+        "command": "extension.banga-debug.toggleFormatting",
+        "title": "Toggle between decimal and hex formatting"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "bangalang"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "banga",
+        "languages": ["bangalang"],
+        "label": "Banga Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to a text file.",
+                "default": "${workspaceFolder}/${command:AskForProgramName}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Enable logging of the Debug Adapter Protocol.",
+                "default": true
+              },
+              "compileError": {
+                "type": "string",
+                "description": "Simulates a compile error in 'launch' request.",
+								"enum": [
+									"default",
+									"show",
+									"hide"
+								],
+								"enumDescriptions": [
+                  "default: show fake compile error to user",
+									"show fake compile error to user",
+									"do not show fake compile error to user"
+								]
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "banga",
+            "request": "launch",
+            "name": "Ask for file name",
+            "program": "${workspaceFolder}/${command:AskForProgramName}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Banga Debug: Launch",
+            "description": "A new configuration for 'debugging' a user selected banga file.",
+            "body": {
+              "type": "banga",
+              "request": "launch",
+              "name": "Ask for file name",
+              "program": "^\"\\${workspaceFolder}/\\${command:AskForProgramName}\"",
+              "stopOnEntry": true
+            }
+          }
+        ],
+        "variables": {
+          "AskForProgramName": "extension.banga-debug.getProgramName"
+        }
+      }
+    ]
+  }
+}
